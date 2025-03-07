@@ -30,6 +30,16 @@ public:
 class SamplingDistributions
 {
 public:
+	static Vec3 uniformSampleHemisphere(float r1, float r2)
+	{
+		// Add code here
+		return Vec3(0, 0, 1);
+	}
+	static float uniformHemispherePDF(const Vec3 wi)
+	{
+		// Add code here
+		return 1.0f;
+	}
 	static Vec3 cosineSampleHemisphere(float r1, float r2)
 	{
 		// Add code here
