@@ -41,7 +41,8 @@ public:
 	// Add code here
 	bool rayIntersect(Ray& r, float& t)
 	{
-		return false;
+		t = (d - n.dot(r.o)) / (n.dot(r.dir));
+		return t >= 0;
 	}
 };
 
@@ -76,6 +77,21 @@ public:
 	// Add code here
 	bool rayIntersect(const Ray& r, float& t, float& u, float& v) const
 	{
+		float denom = Dot(n, r.dir);
+		if (denom == 0) { return false; }
+
+		t = (d - Dot(n, r.o)) / denom;
+		if (t < 0) { return false; }
+
+		Vec3 p = r.at(t);
+		float invArea = 1.0f / Dot(e1.cross(e2), n);
+
+		u = Dot(e1.cross(p - vertices[1].p), n) * invArea;
+		if (u < 0 || u > 1.0f) { return false; }
+
+		v = Dot(e2.cross(p - vertices[2].p), n) * invArea;
+		if (v < 0 || (u + v) > 1.0f) { return false; }
+
 		return true;
 	}
 	void interpolateAttributes(const float alpha, const float beta, const float gamma, Vec3& interpolatedNormal, float& interpolatedU, float& interpolatedV) const
@@ -101,30 +117,69 @@ class AABB
 public:
 	Vec3 max;
 	Vec3 min;
+
 	AABB()
 	{
 		reset();
 	}
+
 	void reset()
 	{
 		max = Vec3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
 		min = Vec3(FLT_MAX, FLT_MAX, FLT_MAX);
 	}
+
 	void extend(const Vec3 p)
 	{
 		max = Max(max, p);
 		min = Min(min, p);
 	}
+
 	// Add code here
 	bool rayAABB(const Ray& r, float& t)
 	{
-		return true;
+		// find points of intersection
+		Vec3 tmin = (min - r.o) * r.invDir;
+		Vec3 tmax = (max - r.o) * r.invDir;
+
+		// swaping for correct entry and exit points
+		Vec3 entry = Min(tmin, tmax);
+		Vec3 exit = Max(tmin, tmax);
+
+		// find time of intersection for entry and exit point
+		float tentry = std::max(std::max(entry.x, entry.y), entry.z);
+		float texit = std::min(std::min(exit.x, exit.y), exit.z);
+
+		if (tentry <= texit && texit >= 0)
+		{
+			t = (tentry >= 0) ? tentry : texit;		// handle case where ray origin is inside of bounding box
+			return true;
+		}
+
+		return false;
 	}
+
 	// Add code here
 	bool rayAABB(const Ray& r)
 	{
-		return true;
+		// find points of intersection
+		Vec3 tmin = (min - r.o) * r.invDir;
+		Vec3 tmax = (max - r.o) * r.invDir;
+
+		// swaping for correct entry and exit points
+		Vec3 entry = Min(tmin, tmax);
+		Vec3 exit = Max(tmin, tmax);
+
+		// find time of intersection for entry and exit point
+		float tentry = std::max(std::max(entry.x, entry.y), entry.z);
+		float texit = std::min(std::min(exit.x, exit.y), exit.z);
+
+		if (tentry <= texit && texit >= 0)
+			return true;
+
+		return false;
 	}
+
 	// Add code here
 	float area()
 	{
@@ -143,10 +198,31 @@ public:
 		centre = _centre;
 		radius = _radius;
 	}
+
 	// Add code here
 	bool rayIntersect(Ray& r, float& t)
 	{
-		return false;
+		Vec3 l = r.o - centre;
+		float a = r.dir.dot(r.dir);
+		float b = 2 * r.dir.dot(l);
+		float c = l.dot(l) - SQ(radius);
+
+		float dis = b * b - 4 * a * c;
+
+		if (dis < 0)						// no intersection
+			return false;					
+		else if (dis == 0)					// one intersection
+			t = -0.5 * b / a;				
+		else								// two intersection
+		{
+			float q = (b > 0) ?
+				-0.5 * (b + sqrt(dis)) :
+				-0.5 * (b - sqrt(dis));
+
+			t = std::min(q / a, c / q);
+		}
+
+		return true;
 	}
 };
 

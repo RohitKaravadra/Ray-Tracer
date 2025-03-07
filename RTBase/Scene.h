@@ -26,11 +26,26 @@ public:
 		camera = V;
 		origin = camera.mulPoint(Vec3(0, 0, 0));
 	}
-	// Add code here
+
+	/// <summary>
+	/// Geberates a ray from camera origin
+	/// </summary>
+	/// <param name="x"> x coordinate of screen pixel </param>
+	/// <param name="y"> y coordinate of screen pixel</param>
+	/// <returns> A ray from camera origin with direction to the point on near plane </returns>
 	Ray generateRay(float x, float y)
 	{
-		Vec3 dir(0, 0, 1);
-		return Ray(origin, dir);
+		// screen to clip space
+		x = (2 * x) / (width - 1) - 1;
+		y = 1 - (2 * y) / (height - 1);
+
+		// homogeneous coordinates
+		Vec3 point(x, y, 0, 1);
+
+		point = inverseProjectionMatrix.mulPointAndPerspectiveDivide(point);	// clip to camera space
+		point = camera.mulPointAndPerspectiveDivide(point);						// camera to world space
+
+		return Ray(origin, (point - origin).normalize());						// create and return ray
 	}
 };
 
@@ -47,7 +62,7 @@ public:
 	void build()
 	{
 		// Add BVH building code here
-		
+
 		// Do not touch the code below this line!
 		// Build light list
 		for (int i = 0; i < triangles.size(); i++)
@@ -144,7 +159,8 @@ public:
 			}
 			shadingData.frame.fromVector(shadingData.sNormal);
 			shadingData.t = intersection.t;
-		} else
+		}
+		else
 		{
 			shadingData.wo = -ray.dir;
 			shadingData.t = intersection.t;

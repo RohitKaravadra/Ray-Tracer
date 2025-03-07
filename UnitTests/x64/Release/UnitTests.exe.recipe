@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ProjectOutputs>
+    <ProjectOutput>
+      <FullPath>C:\Users\Rohit Karavadra\Documents\Visual Studio 2022\Projects\Ray Tracer\Output\Builds\RTBase-Release-x64\Ray Tracer.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>C:\Users\Rohit Karavadra\Documents\Visual Studio 2022\Projects\Ray Tracer\x64\Release\UnitTests.exe</FullPath>
+    </ProjectOutput>
+  </ProjectOutputs>
+  <ContentFiles />
+  <SatelliteDlls />
+  <NonRecipeFileRefs />
+</Project>
