@@ -398,6 +398,5 @@ FodyWeavers.xsd
 *.sln.iml
 
 /Output/
-/UnitTest/
 /RTBase/scenes/
 /UnitTests/x64/

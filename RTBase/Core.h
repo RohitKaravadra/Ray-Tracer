@@ -175,6 +175,10 @@ public:
 	{
 		return Vec3((y * v.z) - (z * v.y), (z * v.x) - (x * v.z), (x * v.y) - (y * v.x));
 	}
+	void print()
+	{
+		std::cout << "[" << x << ":" << y << ":" << z << "]\n";
+	}
 };
 
 static float Dot(const Vec3 v1, const Vec3 v2)

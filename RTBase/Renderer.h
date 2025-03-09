@@ -167,8 +167,8 @@ public:
 					//if (!scene->bounds.rayAABB(ray))
 					//	continue;
 
-					Colour col = viewNormals(ray);
-					//Colour col = albedo(ray);
+					//Colour col = viewNormals(ray);
+					Colour col = albedo(ray);
 					film->splat(px, py, col);
 					unsigned char r = (unsigned char)(col.r * 255);
 					unsigned char g = (unsigned char)(col.g * 255);

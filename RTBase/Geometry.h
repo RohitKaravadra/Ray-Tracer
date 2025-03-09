@@ -61,6 +61,8 @@ public:
 	float d; // For ray triangle if needed
 	unsigned int materialIndex;
 
+	Vec3 centre;
+
 	void init(Vertex v0, Vertex v1, Vertex v2, unsigned int _materialIndex)
 	{
 		materialIndex = _materialIndex;
@@ -72,11 +74,8 @@ public:
 		n = e1.cross(e2).normalize();
 		area = e1.cross(e2).length() * 0.5f;
 		d = Dot(n, vertices[0].p);
-	}
 
-	Vec3 centre() const
-	{
-		return (vertices[0].p + vertices[1].p + vertices[2].p) / 3.0f;
+		centre = (vertices[0].p + vertices[1].p + vertices[2].p) / 3.0f;
 	}
 
 	// Add code here
@@ -136,6 +135,7 @@ class AABB
 public:
 	Vec3 max;
 	Vec3 min;
+	Vec3 centre;
 
 	AABB()
 	{
@@ -152,6 +152,7 @@ public:
 	{
 		max = Max(max, p);
 		min = Min(min, p);
+		centre = min + (max - min) / 2.0f;
 	}
 
 	// Add code here
@@ -203,8 +204,6 @@ public:
 		Vec3 size = max - min;
 		return ((size.x * size.y) + (size.y * size.z) + (size.x * size.z)) * 2.0f;
 	}
-
-	Vec3 center() const { return min + (max - min) / 2.0f; }
 };
 
 class Sphere
@@ -284,37 +283,82 @@ class BVH
 	std::vector<BVHNode> data;
 	const int maxDepth = 22;
 
-	bool splitNode(unsigned int node, BVHNode& child_l, BVHNode& child_r)
+	float calcCost(AABB& bounds, unsigned int trices) { return (bounds.area() / 2) * trices; }
+
+	float evaluateSplit(unsigned int node, unsigned int axis, float splitPos)
 	{
-		// get aabb bounds data
-		Vec3 boundsCenter = data[node].bounds.center();
-		Vec3 boundsSize = data[node].bounds.max - data[node].bounds.min;
+		AABB boundA, boundB;
+		unsigned int numA = 0, numB = 0;
 
-		//find max axis for bounding box
-		int axis = 0;
-		if (boundsSize.coords[axis] < boundsSize.coords[1])
-			axis = 1;
-		if (boundsSize.coords[axis] < boundsSize.coords[2])
-			axis = 2;
-
-		// splitting triangles into child nodes
-		for (int index : data[node].triIndices)
+		for (unsigned int i : data[node].triIndices)
 		{
-			Vec3 triCenter = triangles[index].centre();
-			BVHNode& child = triCenter.coords[axis] < boundsCenter.coords[axis] ? child_l : child_r;
-			child.addTringle(index, triangles[index]);
+			float triCenter = triangles[i].centre.coords[axis];
+			if (triCenter < splitPos)
+			{
+				boundA.extend(triangles[i].vertices[0].p);
+				boundA.extend(triangles[i].vertices[1].p);
+				boundA.extend(triangles[i].vertices[2].p);
+				numA++;
+			}
+			else
+			{
+				boundB.extend(triangles[i].vertices[0].p);
+				boundB.extend(triangles[i].vertices[1].p);
+				boundB.extend(triangles[i].vertices[2].p);
+				numB++;
+			}
 		}
 
-		// check if both nodes have some triangles if not no split happened
-		return !(child_l.triIndices.empty() || child_r.triIndices.empty());
+		return calcCost(boundA, numA) + calcCost(boundB, numB);
 	}
 
-	void split(unsigned int node, std::vector<Triangle>& triangles, int depth)
+	bool splitNode(unsigned int node, BVHNode& child_l, BVHNode& child_r)
+	{
+		const unsigned int numTest = 5;
+		unsigned int bestAxis = 0;
+		float bestPos = 0;
+		float bestCost = FLT_MAX;
+
+		for (int axis = 0; axis < 3; axis++)
+		{
+			float boundsStart = data[node].bounds.min.coords[axis];
+			float boundsEnd = data[node].bounds.max.coords[axis];
+
+			for (int i = 0; i < numTest; i++)
+			{
+				float splitT = (i + 1) / float(numTest);
+
+				float pos = boundsStart + (boundsEnd - boundsStart) * splitT;
+				float cost = evaluateSplit(node, axis, pos);
+
+				if (cost < bestCost)
+				{
+					bestCost = cost;
+					bestPos = pos;
+					bestAxis = axis;
+				}
+			}
+		}
+
+		if (calcCost(data[node].bounds, data[node].triIndices.size()) <= bestCost)
+			return false;
+
+		for (unsigned int i : data[node].triIndices)
+		{
+			float triCenter = triangles[i].centre.coords[bestAxis];
+			BVHNode& child = triCenter < bestPos ? child_l : child_r;
+			child.addTringle(i, triangles[i]);
+		}
+
+		return true;
+	}
+
+	void split(unsigned int node, int depth = 0)
 	{
 		// check for max depth reached (leaf node)
 		if (depth >= maxDepth)
 		{
-			std::cout << "Child Node with " << data[node].triIndices.size() << " Triangles\n";
+			//std::cout << "Child Node with " << data[node].triIndices.size() << " Triangles\n";
 			return;
 		}
 
@@ -322,11 +366,11 @@ class BVH
 		BVHNode child_l, child_r;
 		if (!splitNode(node, child_l, child_r))
 		{
-			std::cout << "Child Node with " << data[node].triIndices.size() << " Triangles\n";
+			//std::cout << "Child Node with " << data[node].triIndices.size() << " Triangles\n";
 			return;
 		}
 
-		std::cout << child_l.triIndices.size() << ":" << child_r.triIndices.size() << "->";
+		//std::cout << child_l.triIndices.size() << ":" << child_r.triIndices.size() << "->";
 
 		// update data
 		data.emplace_back(child_l);
@@ -338,11 +382,11 @@ class BVH
 
 		// recursive call to child splitting
 		depth++;
-		split(data[node].child_l, triangles, depth);
-		split(data[node].child_r, triangles, depth);
+		split(data[node].child_l, depth);
+		split(data[node].child_r, depth);
 
 		// clear this nodes triangle indices if not leaf node
-		data[node].triIndices.clear();
+		//data[node].triIndices.clear();
 	}
 
 public:
@@ -367,38 +411,61 @@ public:
 		for (int i = 0; i < inputTriangles.size(); i++)
 			data[0].triIndices.emplace_back(i);
 
+
 		// begin recursive split operation
-		split(0, inputTriangles, 0);
+		split(0);
 		std::cout << "BVH construction complete with " << data[0].triIndices.size() << " triangles\n";
 	}
 
-	void traverse(unsigned int node, const Ray& ray, IntersectionData& intersection)
+	void traverse(const Ray& ray, IntersectionData& intersection)
 	{
-		// check for leaf node to terminate recursion
-		if (data[node].isLeaf())
+		std::stack<unsigned int> stack;
+		stack.push(0);
+
+		while (!stack.empty())
 		{
-			// check all triangles in leaf node
-			for (int index : data[node].triIndices)
+			BVHNode& node = data[stack.top()];
+			stack.pop();
+
+			// check for leaf node to terminate recursion
+			if (node.bounds.rayAABB(ray))
 			{
-				float t, u, v;
-				if (triangles[index].rayIntersect(ray, t, u, v))
+				if (node.isLeaf())
 				{
-					if (t < intersection.t)
+					// check all triangles in leaf node
+					for (int index : node.triIndices)
 					{
-						intersection.t = t;
-						intersection.ID = index;
-						intersection.alpha = u;
-						intersection.beta = v;
-						intersection.gamma = 1.0f - (u + v);
+						float t, u, v;
+						if (triangles[index].rayIntersect(ray, t, u, v))
+						{
+							if (t < intersection.t)
+							{
+								intersection.t = t;
+								intersection.ID = index;
+								intersection.alpha = u;
+								intersection.beta = v;
+								intersection.gamma = 1.0f - (u + v);
+							}
+						}
 					}
+
+					return;
+				}
+
+				// recursive traversal call to child nodes
+				if ((data[node.child_l].bounds.centre - ray.o).lengthSq() <
+					(data[node.child_r].bounds.centre - ray.o).lengthSq())
+				{
+					stack.push(node.child_l);
+					stack.push(node.child_r);
+				}
+				else
+				{
+					stack.push(node.child_r);
+					stack.push(node.child_l);
 				}
 			}
-			return;
 		}
-
-		// recursive traversal call to child nodes
-		traverse(data[node].child_l, ray, intersection);
-		traverse(data[node].child_r, ray, intersection);
 	}
 
 	IntersectionData traverse(const Ray& ray)
@@ -407,7 +474,7 @@ public:
 		intersection.t = FLT_MAX;
 
 		// traverse tree from root node
-		traverse(0, ray, intersection);
+		traverse(ray, intersection);
 
 		return intersection;
 	}
