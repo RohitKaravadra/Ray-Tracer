@@ -56,12 +56,14 @@ public:
 	std::vector<BSDF*> materials;
 	std::vector<Light*> lights;
 	Light* background = NULL;
-	BVHNode* bvh = NULL;
+	BVH bvh;
 	Camera camera;
 	AABB bounds;
+
 	void build()
 	{
 		// Add BVH building code here
+		bvh.build(triangles, bounds);
 
 		// Do not touch the code below this line!
 		// Build light list
@@ -76,7 +78,8 @@ public:
 			}
 		}
 	}
-	IntersectionData traverse(const Ray& ray)
+
+	IntersectionData traverseAll(const Ray& ray)
 	{
 		IntersectionData intersection;
 		intersection.t = FLT_MAX;
@@ -97,8 +100,14 @@ public:
 				}
 			}
 		}
-		return intersection;
 	}
+
+	IntersectionData traverse(const Ray& ray)
+	{
+		//return traverseAll(ray);
+		return bvh.traverse(ray);
+	}
+
 	Light* sampleLight(Sampler* sampler, float& pmf)
 	{
 		return NULL;
@@ -130,7 +139,7 @@ public:
 		float maxT = dir.length() - (2.0f * EPSILON);
 		dir = dir.normalize();
 		ray.init(p1 + (dir * EPSILON), dir);
-		return bvh->traverseVisible(ray, triangles, maxT);
+		return bvh.traverseVisible(ray, triangles, maxT);
 	}
 	Colour emit(Triangle* light, ShadingData shadingData, Vec3 wi)
 	{

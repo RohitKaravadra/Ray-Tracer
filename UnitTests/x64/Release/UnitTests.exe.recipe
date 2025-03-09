@@ -2,10 +2,10 @@
 <Project>
   <ProjectOutputs>
     <ProjectOutput>
-      <FullPath>C:\Users\Rohit Karavadra\Documents\Visual Studio 2022\Projects\Ray Tracer\Output\Builds\RTBase-Release-x64\Ray Tracer.exe</FullPath>
+      <FullPath>C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\Output\Builds\Ray-Tracer-Release-x64\Ray Tracer.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
-      <FullPath>C:\Users\Rohit Karavadra\Documents\Visual Studio 2022\Projects\Ray Tracer\x64\Release\UnitTests.exe</FullPath>
+      <FullPath>C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\x64\Release\UnitTests.exe</FullPath>
     </ProjectOutput>
   </ProjectOutputs>
   <ContentFiles />

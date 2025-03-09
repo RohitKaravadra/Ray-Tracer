@@ -54,3 +54,21 @@ TEST(RaySphere, RayDoesNotIntersectsSphere)
 	// Test: Ray origin inside AABB (should intersect)
 	ASSERT_FALSE(s.rayIntersect(ray, t));
 }
+
+TEST(AABBTest, CorrectCenter)
+{
+	AABB aabb;
+	aabb.min = Vec3(0, 0, 0);
+	aabb.max = Vec3(4, 4, 4);
+	// Test: Ray origin inside AABB (should intersect)
+	ASSERT_TRUE(aabb.center() == Vec3(2, 2, 2));
+}
+
+TEST(AABBTest, IncorrectCenter)
+{
+	AABB aabb;
+	aabb.min = Vec3(0, 0, 0);
+	aabb.max = Vec3(5, 5, 5);
+	// Test: Ray origin inside AABB (should intersect)
+	ASSERT_FALSE(aabb.center() == Vec3(2, 2, 2));
+}

@@ -10,7 +10,7 @@
 #include "GamesEngineeringBase.h"
 #include <thread>
 #include <functional>
-#include <conio.h>
+#include <mutex>
 
 class RayTracer
 {
@@ -21,12 +21,16 @@ public:
 	Film* film;
 	MTRandom* samplers;
 	std::thread** threads;
+
 	int numProcs;
+	unsigned int numThreads;
 
 	unsigned int totalTiles;
 	unsigned int totalXTiles;
-	const unsigned int tileSize = 64;
+	const unsigned int tileSize = 32;
 	std::atomic<unsigned int> tileCounter;
+
+	std::mutex mtx;
 
 	~RayTracer()
 	{
@@ -42,7 +46,7 @@ public:
 			delete film;
 	}
 
-	void init(Scene* _scene, GamesEngineeringBase::Window* _canvas)
+	void init(Scene* _scene, GamesEngineeringBase::Window* _canvas, unsigned int _numThreads = 3)
 	{
 		scene = _scene;
 		canvas = _canvas;
@@ -54,8 +58,9 @@ public:
 		GetSystemInfo(&sysInfo);
 		numProcs = sysInfo.dwNumberOfProcessors;
 
-		threads = new std::thread * [numProcs];
-		samplers = new MTRandom[numProcs];
+		numThreads = max(1, min(_numThreads, numProcs));
+		threads = new std::thread * [numThreads];
+		samplers = new MTRandom[numThreads];
 
 		totalXTiles = canvas->getWidth() / tileSize;
 		totalTiles = totalXTiles * canvas->getHeight() / tileSize;
@@ -158,6 +163,10 @@ public:
 					float px = x + 0.5f;
 					float py = y + 0.5f;
 					Ray ray = scene->camera.generateRay(px, py);
+
+					//if (!scene->bounds.rayAABB(ray))
+					//	continue;
+
 					Colour col = viewNormals(ray);
 					//Colour col = albedo(ray);
 					film->splat(px, py, col);
@@ -167,6 +176,9 @@ public:
 					canvas->draw(x, y, r, g, b);
 				}
 			}
+			//mtx.lock();
+			//canvas->present();
+			//mtx.unlock();
 		}
 	}
 
@@ -174,21 +186,21 @@ public:
 	/// Render using multiple threads and segments
 	/// </summary>
 	/// <param name="numThreads">Number of threads to use (uses between 1 and max threads processor supports)</param>
-	void renderMT(unsigned int numThreads = 3)
+	void renderMT()
 	{
 		numThreads = max(1, min(numThreads, numProcs));
 
 		film->incrementSPP();
-
-		std::vector<std::thread> threads;
-
 		tileCounter.store(0);
 
 		for (int i = 0; i < numThreads; i++)
-			threads.emplace_back(std::thread(&RayTracer::processTile, this));
+			threads[i] = new std::thread(&RayTracer::processTile, this);
 
-		for (auto& t : threads)
-			t.join();
+		for (int i = 0; i < numThreads; i++)
+		{
+			threads[i]->join();
+			delete threads[i];
+		}
 	}
 
 	int getSPP()

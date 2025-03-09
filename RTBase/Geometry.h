@@ -2,6 +2,8 @@
 
 #include "Core.h"
 #include "Sampling.h"
+#include <conio.h>
+#include <stack>
 
 class Ray
 {
@@ -58,42 +60,57 @@ public:
 	float area; // Triangle area
 	float d; // For ray triangle if needed
 	unsigned int materialIndex;
+
 	void init(Vertex v0, Vertex v1, Vertex v2, unsigned int _materialIndex)
 	{
 		materialIndex = _materialIndex;
 		vertices[0] = v0;
 		vertices[1] = v1;
 		vertices[2] = v2;
-		e1 = vertices[2].p - vertices[1].p;
-		e2 = vertices[0].p - vertices[2].p;
+		e1 = vertices[1].p - vertices[0].p;
+		e2 = vertices[2].p - vertices[0].p;
 		n = e1.cross(e2).normalize();
 		area = e1.cross(e2).length() * 0.5f;
 		d = Dot(n, vertices[0].p);
 	}
+
 	Vec3 centre() const
 	{
 		return (vertices[0].p + vertices[1].p + vertices[2].p) / 3.0f;
 	}
+
 	// Add code here
 	bool rayIntersect(const Ray& r, float& t, float& u, float& v) const
 	{
-		float denom = Dot(n, r.dir);
-		if (denom == 0) { return false; }
+		Vec3 p = Cross(r.dir, e2);
+		float det = p.dot(e1);
 
-		t = (d - Dot(n, r.o)) / denom;
-		if (t < 0) { return false; }
+		// parellel ray check
+		if (std::abs(det) < EPSILON)
+			return false;
 
-		Vec3 p = r.at(t);
-		float invArea = 1.0f / Dot(e1.cross(e2), n);
+		float invDet = 1.0f / det;
+		Vec3 T = r.o - vertices[0].p;
 
-		u = Dot(e1.cross(p - vertices[1].p), n) * invArea;
-		if (u < 0 || u > 1.0f) { return false; }
+		u = T.dot(p) * invDet;
 
-		v = Dot(e2.cross(p - vertices[2].p), n) * invArea;
-		if (v < 0 || (u + v) > 1.0f) { return false; }
+		if ((u < 0 && abs(u) > EPSILON) || (u > 1 && abs(u - 1) > EPSILON))
+			return false;
+
+		p = Cross(T, e1);
+		v = r.dir.dot(p) * invDet;
+
+		if ((v < 0 && abs(v) > EPSILON) || (u + v > 1 && abs(u + v - 1) > EPSILON))
+			return false;
+
+		t = e2.dot(p) * invDet;
+
+		if (t < EPSILON)
+			return false;
 
 		return true;
 	}
+
 	void interpolateAttributes(const float alpha, const float beta, const float gamma, Vec3& interpolatedNormal, float& interpolatedU, float& interpolatedV) const
 	{
 		interpolatedNormal = vertices[0].normal * alpha + vertices[1].normal * beta + vertices[2].normal * gamma;
@@ -101,11 +118,13 @@ public:
 		interpolatedU = vertices[0].u * alpha + vertices[1].u * beta + vertices[2].u * gamma;
 		interpolatedV = vertices[0].v * alpha + vertices[1].v * beta + vertices[2].v * gamma;
 	}
+
 	// Add code here
 	Vec3 sample(Sampler* sampler, float& pdf)
 	{
 		return Vec3(0, 0, 0);
 	}
+
 	Vec3 gNormal()
 	{
 		return (n * (Dot(vertices[0].normal, n) > 0 ? 1.0f : -1.0f));
@@ -150,13 +169,11 @@ public:
 		float tentry = std::max(std::max(entry.x, entry.y), entry.z);
 		float texit = std::min(std::min(exit.x, exit.y), exit.z);
 
-		if (tentry <= texit && texit >= 0)
-		{
-			t = (tentry >= 0) ? tentry : texit;		// handle case where ray origin is inside of bounding box
-			return true;
-		}
+		if (tentry > texit || texit < 0)
+			return false;
 
-		return false;
+		t = (tentry >= 0) ? tentry : texit;		// handle case where ray origin is inside of bounding box
+		return true;
 	}
 
 	// Add code here
@@ -174,10 +191,10 @@ public:
 		float tentry = std::max(std::max(entry.x, entry.y), entry.z);
 		float texit = std::min(std::min(exit.x, exit.y), exit.z);
 
-		if (tentry <= texit && texit >= 0)
-			return true;
+		if (tentry > texit || texit < 0)
+			return false;
 
-		return false;
+		return true;
 	}
 
 	// Add code here
@@ -186,6 +203,8 @@ public:
 		Vec3 size = max - min;
 		return ((size.x * size.y) + (size.y * size.z) + (size.x * size.z)) * 2.0f;
 	}
+
+	Vec3 center() const { return min + (max - min) / 2.0f; }
 };
 
 class Sphere
@@ -210,9 +229,9 @@ public:
 		float dis = b * b - 4 * a * c;
 
 		if (dis < 0)						// no intersection
-			return false;					
+			return false;
 		else if (dis == 0)					// one intersection
-			t = -0.5 * b / a;				
+			t = -0.5 * b / a;
 		else								// two intersection
 		{
 			float q = (b > 0) ?
@@ -240,37 +259,159 @@ struct IntersectionData
 #define TRIANGLE_COST 2.0f
 #define BUILD_BINS 32
 
-class BVHNode
+struct BVHNode
 {
-public:
 	AABB bounds;
-	BVHNode* r;
-	BVHNode* l;
+	std::vector<int> triIndices;
+	unsigned int child_l, child_r;
+
+	BVHNode() :child_l(0), child_r(0) {}
+
+	bool isLeaf() const { return child_l == 0 && child_r == 0; }
+
+	void addTringle(int index, Triangle& tri)
+	{
+		bounds.extend(tri.vertices[0].p);
+		bounds.extend(tri.vertices[1].p);
+		bounds.extend(tri.vertices[2].p);
+		triIndices.emplace_back(index);
+	}
+};
+
+class BVH
+{
+	Triangle* triangles;
+	std::vector<BVHNode> data;
+	const int maxDepth = 22;
+
+	bool splitNode(unsigned int node, BVHNode& child_l, BVHNode& child_r)
+	{
+		// get aabb bounds data
+		Vec3 boundsCenter = data[node].bounds.center();
+		Vec3 boundsSize = data[node].bounds.max - data[node].bounds.min;
+
+		//find max axis for bounding box
+		int axis = 0;
+		if (boundsSize.coords[axis] < boundsSize.coords[1])
+			axis = 1;
+		if (boundsSize.coords[axis] < boundsSize.coords[2])
+			axis = 2;
+
+		// splitting triangles into child nodes
+		for (int index : data[node].triIndices)
+		{
+			Vec3 triCenter = triangles[index].centre();
+			BVHNode& child = triCenter.coords[axis] < boundsCenter.coords[axis] ? child_l : child_r;
+			child.addTringle(index, triangles[index]);
+		}
+
+		// check if both nodes have some triangles if not no split happened
+		return !(child_l.triIndices.empty() || child_r.triIndices.empty());
+	}
+
+	void split(unsigned int node, std::vector<Triangle>& triangles, int depth)
+	{
+		// check for max depth reached (leaf node)
+		if (depth >= maxDepth)
+		{
+			std::cout << "Child Node with " << data[node].triIndices.size() << " Triangles\n";
+			return;
+		}
+
+		// create child nodes
+		BVHNode child_l, child_r;
+		if (!splitNode(node, child_l, child_r))
+		{
+			std::cout << "Child Node with " << data[node].triIndices.size() << " Triangles\n";
+			return;
+		}
+
+		std::cout << child_l.triIndices.size() << ":" << child_r.triIndices.size() << "->";
+
+		// update data
+		data.emplace_back(child_l);
+		data.emplace_back(child_r);
+
+		// update nodes child indices
+		data[node].child_l = data.size() - 2;
+		data[node].child_r = data.size() - 1;
+
+		// recursive call to child splitting
+		depth++;
+		split(data[node].child_l, triangles, depth);
+		split(data[node].child_r, triangles, depth);
+
+		// clear this nodes triangle indices if not leaf node
+		data[node].triIndices.clear();
+	}
+
+public:
+
 	// This can store an offset and number of triangles in a global triangle list for example
 	// But you can store this however you want!
 	// unsigned int offset;
 	// unsigned char num;
-	BVHNode()
-	{
-		r = NULL;
-		l = NULL;
-	}
+
 	// Note there are several options for how to implement the build method. Update this as required
-	void build(std::vector<Triangle>& inputTriangles)
+	void build(std::vector<Triangle>& inputTriangles, AABB bounds)
 	{
-		// Add BVH building code here
+		// set triangles
+		triangles = &inputTriangles[0];
+
+		// clear data if any
+		data.clear();
+
+		// add root node to the data
+		data.emplace_back(BVHNode());
+		data[0].bounds = bounds;
+		for (int i = 0; i < inputTriangles.size(); i++)
+			data[0].triIndices.emplace_back(i);
+
+		// begin recursive split operation
+		split(0, inputTriangles, 0);
+		std::cout << "BVH construction complete with " << data[0].triIndices.size() << " triangles\n";
 	}
-	void traverse(const Ray& ray, const std::vector<Triangle>& triangles, IntersectionData& intersection)
+
+	void traverse(unsigned int node, const Ray& ray, IntersectionData& intersection)
 	{
-		// Add BVH Traversal code here
+		// check for leaf node to terminate recursion
+		if (data[node].isLeaf())
+		{
+			// check all triangles in leaf node
+			for (int index : data[node].triIndices)
+			{
+				float t, u, v;
+				if (triangles[index].rayIntersect(ray, t, u, v))
+				{
+					if (t < intersection.t)
+					{
+						intersection.t = t;
+						intersection.ID = index;
+						intersection.alpha = u;
+						intersection.beta = v;
+						intersection.gamma = 1.0f - (u + v);
+					}
+				}
+			}
+			return;
+		}
+
+		// recursive traversal call to child nodes
+		traverse(data[node].child_l, ray, intersection);
+		traverse(data[node].child_r, ray, intersection);
 	}
-	IntersectionData traverse(const Ray& ray, const std::vector<Triangle>& triangles)
+
+	IntersectionData traverse(const Ray& ray)
 	{
 		IntersectionData intersection;
 		intersection.t = FLT_MAX;
-		traverse(ray, triangles, intersection);
+
+		// traverse tree from root node
+		traverse(0, ray, intersection);
+
 		return intersection;
 	}
+
 	bool traverseVisible(const Ray& ray, const std::vector<Triangle>& triangles, const float maxT)
 	{
 		// Add visibility code here

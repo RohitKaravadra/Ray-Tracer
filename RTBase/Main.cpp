@@ -18,7 +18,7 @@ int main(int argc, char* argv[])
 	// runTests()
 
 	// Initialize default parameters
-	std::string sceneName = "cornell-box";
+	std::string sceneName = "scenes/cornell-box";
 	std::string filename = "GI.hdr";
 	unsigned int SPP = 8192;
 
@@ -66,7 +66,7 @@ int main(int argc, char* argv[])
 	GamesEngineeringBase::Window canvas;
 	canvas.create((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, "Tracer", 1.0f);
 	RayTracer rt;
-	rt.init(scene, &canvas);
+	rt.init(scene, &canvas, 10);
 	bool running = true;
 	GamesEngineeringBase::Timer timer;
 	while (running)
@@ -116,7 +116,7 @@ int main(int argc, char* argv[])
 		}
 		// Time how long a render call takes
 		timer.reset();
-		rt.renderMT(5);
+		rt.renderMT();
 		float t = timer.dt();
 		// Write
 		std::cout << t << std::endl;
