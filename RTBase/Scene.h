@@ -105,8 +105,8 @@ public:
 
 	IntersectionData traverse(const Ray& ray)
 	{
-		return traverseAll(ray);
-		//return bvh.traverse(ray);
+		//return traverseAll(ray);
+		return bvh.traverse(ray);
 	}
 
 	Light* sampleLight(Sampler* sampler, float& pmf)

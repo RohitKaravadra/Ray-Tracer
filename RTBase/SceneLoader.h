@@ -18,6 +18,7 @@ public:
 	{
 		rotspeed = 5.0f;
 	}
+
 	void forward()
 	{
 		Vec3 dir = to - from;
@@ -26,6 +27,7 @@ public:
 		to = from + dir;
 		updateCamera();
 	}
+
 	void back()
 	{
 		Vec3 dir = to - from;
@@ -34,6 +36,7 @@ public:
 		to = from + dir;
 		updateCamera();
 	}
+
 	void left()
 	{
 		Vec3 dir = to - from;
@@ -50,6 +53,7 @@ public:
 		to = from + dir;
 		updateCamera();
 	}
+
 	void right()
 	{
 		Vec3 dir = to - from;
@@ -65,6 +69,7 @@ public:
 		to = from + dir;
 		updateCamera();
 	}
+
 	void flyUp()
 	{
 		Vec3 dir = up * movespeed;
@@ -72,6 +77,7 @@ public:
 		to = to + dir;
 		updateCamera();
 	}
+
 	void flyDown()
 	{
 		Vec3 dir = up * movespeed;
@@ -79,6 +85,7 @@ public:
 		to = to - dir;
 		updateCamera();
 	}
+
 	void updateCamera()
 	{
 		Matrix V = Matrix::lookAt(from, to, up);

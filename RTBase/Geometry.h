@@ -152,7 +152,8 @@ public:
 	{
 		max = Max(max, p);
 		min = Min(min, p);
-		centre = min + (max - min) / 2.0f;
+
+		centre = min + (max - min) * 0.5f;
 	}
 
 	// Add code here
@@ -281,9 +282,10 @@ class BVH
 {
 	Triangle* triangles;
 	std::vector<BVHNode> data;
-	const int maxDepth = 22;
 
-	float calcCost(AABB& bounds, unsigned int trices) { return (bounds.area() / 2) * trices; }
+	const int maxDepth = 50;
+
+	float calcCost(AABB& bounds, unsigned int trices) { return bounds.area() * 0.5f * trices; }
 
 	float evaluateSplit(unsigned int node, unsigned int axis, float splitPos)
 	{
@@ -319,14 +321,19 @@ class BVH
 		float bestPos = 0;
 		float bestCost = FLT_MAX;
 
+		// to replace division with multiplication in loops
+		float invNumTest = 1 / (float)numTest;
+
 		for (int axis = 0; axis < 3; axis++)
 		{
+			// calculate bound size
 			float boundsStart = data[node].bounds.min.coords[axis];
 			float boundsEnd = data[node].bounds.max.coords[axis];
 
+			// check for each split
 			for (int i = 0; i < numTest; i++)
 			{
-				float splitT = (i + 1) / float(numTest);
+				float splitT = (i + 1) * invNumTest;
 
 				float pos = boundsStart + (boundsEnd - boundsStart) * splitT;
 				float cost = evaluateSplit(node, axis, pos);
@@ -340,9 +347,11 @@ class BVH
 			}
 		}
 
+		// check if new cost is greater than parents cost
 		if (calcCost(data[node].bounds, data[node].triIndices.size()) <= bestCost)
 			return false;
 
+		// create left and right childs
 		for (unsigned int i : data[node].triIndices)
 		{
 			float triCenter = triangles[i].centre.coords[bestAxis];
@@ -353,24 +362,16 @@ class BVH
 		return true;
 	}
 
-	void split(unsigned int node, int depth = 0)
+	unsigned int split(unsigned int node, int depth = 0)
 	{
 		// check for max depth reached (leaf node)
 		if (depth >= maxDepth)
-		{
-			//std::cout << "Child Node with " << data[node].triIndices.size() << " Triangles\n";
-			return;
-		}
+			return depth;
 
 		// create child nodes
 		BVHNode child_l, child_r;
 		if (!splitNode(node, child_l, child_r))
-		{
-			//std::cout << "Child Node with " << data[node].triIndices.size() << " Triangles\n";
-			return;
-		}
-
-		//std::cout << child_l.triIndices.size() << ":" << child_r.triIndices.size() << "->";
+			return depth;
 
 		// update data
 		data.emplace_back(child_l);
@@ -382,11 +383,13 @@ class BVH
 
 		// recursive call to child splitting
 		depth++;
-		split(data[node].child_l, depth);
-		split(data[node].child_r, depth);
+		unsigned int depth1 = split(data[node].child_l, depth);
+		unsigned int depth2 = split(data[node].child_r, depth);
 
 		// clear this nodes triangle indices if not leaf node
-		//data[node].triIndices.clear();
+		data[node].triIndices.clear();
+
+		return std::max(depth1, depth2);
 	}
 
 public:
@@ -402,6 +405,8 @@ public:
 		// set triangles
 		triangles = &inputTriangles[0];
 
+		std::cout << "Total Triangles in scene is " << inputTriangles.size() << std::endl;
+
 		// clear data if any
 		data.clear();
 
@@ -413,8 +418,8 @@ public:
 
 
 		// begin recursive split operation
-		split(0);
-		std::cout << "BVH construction complete with " << data[0].triIndices.size() << " triangles\n";
+		unsigned int depth = split(0);
+		std::cout << "Total depth reached is " << depth << std::endl;
 	}
 
 	void traverse(const Ray& ray, IntersectionData& intersection)
@@ -432,12 +437,12 @@ public:
 			{
 				if (node.isLeaf())
 				{
-					// check all triangles in leaf node
-					for (int index : node.triIndices)
+					for (unsigned int index : node.triIndices)
 					{
 						float t, u, v;
 						if (triangles[index].rayIntersect(ray, t, u, v))
 						{
+							//collide = true;
 							if (t < intersection.t)
 							{
 								intersection.t = t;
@@ -448,25 +453,13 @@ public:
 							}
 						}
 					}
-
-					return;
-				}
-
-				stack.push(node.child_l);
-				stack.push(node.child_r);
-
-				// recursive traversal call to child nodes
-				/*if ((data[node.child_l].bounds.centre - ray.o).lengthSq() <
-					(data[node.child_r].bounds.centre - ray.o).lengthSq())
-				{
-					stack.push(node.child_l);
-					stack.push(node.child_r);
 				}
 				else
 				{
-					stack.push(node.child_r);
+					// recursive traversal call to child nodes
 					stack.push(node.child_l);
-				}*/
+					stack.push(node.child_r);
+				}
 			}
 		}
 	}

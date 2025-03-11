@@ -27,7 +27,7 @@ public:
 
 	unsigned int totalTiles;
 	unsigned int totalXTiles;
-	const unsigned int tileSize = 32;
+	const unsigned int tileSize = 16;
 	std::atomic<unsigned int> tileCounter;
 
 	std::mutex mtx;
@@ -52,7 +52,7 @@ public:
 		canvas = _canvas;
 
 		film = new Film();
-		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter());
+		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
 
 		SYSTEM_INFO sysInfo;
 		GetSystemInfo(&sysInfo);
@@ -134,12 +134,11 @@ public:
 				float px = x + 0.5f;
 				float py = y + 0.5f;
 				Ray ray = scene->camera.generateRay(px, py);
-				Colour col = viewNormals(ray);
-				//Colour col = albedo(ray);
+				//Colour col = viewNormals(ray);
+				Colour col = albedo(ray);
 				film->splat(px, py, col);
-				unsigned char r = (unsigned char)(col.r * 255);
-				unsigned char g = (unsigned char)(col.g * 255);
-				unsigned char b = (unsigned char)(col.b * 255);
+				unsigned char r, g, b;
+				film->tonemap(x, y, r, g, b);
 				canvas->draw(x, y, r, g, b);
 			}
 		}
