@@ -452,8 +452,11 @@ public:
 					return;
 				}
 
+				stack.push(node.child_l);
+				stack.push(node.child_r);
+
 				// recursive traversal call to child nodes
-				if ((data[node.child_l].bounds.centre - ray.o).lengthSq() <
+				/*if ((data[node.child_l].bounds.centre - ray.o).lengthSq() <
 					(data[node.child_r].bounds.centre - ray.o).lengthSq())
 				{
 					stack.push(node.child_l);
@@ -463,7 +466,7 @@ public:
 				{
 					stack.push(node.child_r);
 					stack.push(node.child_l);
-				}
+				}*/
 			}
 		}
 	}

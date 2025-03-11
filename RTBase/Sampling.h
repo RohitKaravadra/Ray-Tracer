@@ -32,32 +32,43 @@ class SamplingDistributions
 public:
 	static Vec3 uniformSampleHemisphere(float r1, float r2)
 	{
-		// Add code here
-		return Vec3(0, 0, 1);
+		float theta = acosf(r1);
+		float phy = M_PI * 2 * r2;
+		float st = sinf(theta);
+		return Vec3(sinf(theta) * cosf(phy), sinf(theta) * sinf(phy), r1);
 	}
+
 	static float uniformHemispherePDF(const Vec3 wi)
 	{
 		// Add code here
-		return 1.0f;
+		return 1.0f / (M_PI * 2);
 	}
+
 	static Vec3 cosineSampleHemisphere(float r1, float r2)
 	{
-		// Add code here
-		return Vec3(0, 0, 1);
+		float theta = acosf(sqrt(r1));
+		float phy = M_PI * 2 * r2;
+		float st = sinf(theta);
+		return Vec3(sinf(theta) * cosf(phy), sinf(theta) * sinf(phy), cosf(r1));
 	}
+
 	static float cosineHemispherePDF(const Vec3 wi)
 	{
 		// Add code here
-		return 1.0f;
+		return wi.z / M_PI;
 	}
+
 	static Vec3 uniformSampleSphere(float r1, float r2)
 	{
-		// Add code here
-		return Vec3(0, 0, 1);
+		float theta = acosf(1 - 2 * r1);
+		float phy = M_PI * 2 * r2;
+		float st = sinf(theta);
+		return Vec3(sinf(theta) * cosf(phy), sinf(theta) * sinf(phy), cosf(r1));
 	}
+
 	static float uniformSpherePDF(const Vec3& wi)
 	{
 		// Add code here
-		return 1.0f;
+		return 1.0f / (M_PI * 4);
 	}
 };

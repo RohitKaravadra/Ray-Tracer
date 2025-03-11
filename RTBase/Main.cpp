@@ -18,7 +18,7 @@ int main(int argc, char* argv[])
 	// runTests()
 
 	// Initialize default parameters
-	std::string sceneName = "scenes/bathroom";// "scenes/cornell-box";
+	std::string sceneName = "scenes/cornell-box"; //"scenes/bathroom";
 	std::string filename = "GI.hdr";
 	unsigned int SPP = 8192;
 
@@ -66,7 +66,7 @@ int main(int argc, char* argv[])
 	GamesEngineeringBase::Window canvas;
 	canvas.create((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, "Tracer", 1.0f);
 	RayTracer rt;
-	rt.init(scene, &canvas, 10);
+	rt.init(scene, &canvas, 20);
 	bool running = true;
 	GamesEngineeringBase::Timer timer;
 	while (running)
