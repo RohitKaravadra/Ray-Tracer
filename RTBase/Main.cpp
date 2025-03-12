@@ -18,7 +18,7 @@ int main(int argc, char* argv[])
 	// runTests()
 
 	// Initialize default parameters
-	std::string sceneName = "scenes/kitchen"; //"scenes/cornell-box";
+	std::string sceneName = "scenes/dining-room";
 	std::string filename = "GI.hdr";
 	unsigned int SPP = 8192;
 
@@ -62,7 +62,8 @@ int main(int argc, char* argv[])
 			}
 		}
 	}
-	Scene* scene = loadScene(sceneName);
+	RTCamera viewcamera;
+	Scene* scene = loadScene(sceneName, viewcamera);
 	GamesEngineeringBase::Window canvas;
 	canvas.create((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, "Tracer", 1.0f);
 	RayTracer rt;
@@ -80,40 +81,9 @@ int main(int argc, char* argv[])
 		}
 
 		canvas.clear();
-		if (canvas.keyPressed(VK_ESCAPE))
-		{
-			break;
-		}
-		if (canvas.keyPressed('W'))
-		{
-			viewcamera.forward();
+		if (viewcamera.update(canvas))
 			rt.clear();
-		}
-		if (canvas.keyPressed('S'))
-		{
-			viewcamera.back();
-			rt.clear();
-		}
-		if (canvas.keyPressed('A'))
-		{
-			viewcamera.left();
-			rt.clear();
-		}
-		if (canvas.keyPressed('D'))
-		{
-			viewcamera.right();
-			rt.clear();
-		}
-		if (canvas.keyPressed('E'))
-		{
-			viewcamera.flyUp();
-			rt.clear();
-		}
-		if (canvas.keyPressed('Q'))
-		{
-			viewcamera.flyDown();
-			rt.clear();
-		}
+
 		// Time how long a render call takes
 		timer.reset();
 		rt.renderMT();
@@ -137,5 +107,8 @@ int main(int argc, char* argv[])
 		}
 		canvas.present();
 	}
+
+	delete scene;
+
 	return 0;
 }

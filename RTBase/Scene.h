@@ -60,6 +60,11 @@ public:
 	Camera camera;
 	AABB bounds;
 
+	~Scene()
+	{
+		delete background;
+	}
+
 	void build()
 	{
 		// Add BVH building code here

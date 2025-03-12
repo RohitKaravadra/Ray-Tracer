@@ -419,7 +419,29 @@ public:
 
 		// begin recursive split operation
 		unsigned int depth = split(0);
-		std::cout << "Total depth reached is " << depth << std::endl;
+
+		// debug BVH info after build
+		unsigned int trices = 0;
+		unsigned int nodes = 0;
+		unsigned int maxTrice = 0;
+		for (auto& node : data)
+		{
+			if (node.isLeaf())
+			{
+				unsigned int tri = node.triIndices.size();
+				trices += tri;
+				if (tri > maxTrice)
+					maxTrice = tri;
+				nodes++;
+			}
+		}
+
+		std::cout << "\n------: BVH Info :------\n";
+		std::cout << "Total depth                 - " << depth << "/" << maxDepth << std::endl;
+		std::cout << "Total nodes                 - " << data.size() << std::endl;
+		std::cout << "Total Triangles             - " << trices << std::endl;
+		std::cout << "Average triangle per node   - " << float(trices) / nodes << std::endl;
+		std::cout << "Maximum triangles in a node - " << maxTrice << "\n\n";
 	}
 
 	void traverse(const Ray& ray, IntersectionData& intersection)
