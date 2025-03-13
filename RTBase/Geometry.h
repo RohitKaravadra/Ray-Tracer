@@ -69,8 +69,8 @@ public:
 		vertices[0] = v0;
 		vertices[1] = v1;
 		vertices[2] = v2;
-		e1 = vertices[1].p - vertices[0].p;
-		e2 = vertices[2].p - vertices[0].p;
+		e1 = vertices[2].p - vertices[1].p;
+		e2 = vertices[0].p - vertices[2].p;
 		n = e1.cross(e2).normalize();
 		area = e1.cross(e2).length() * 0.5f;
 		d = Dot(n, vertices[0].p);
@@ -81,7 +81,20 @@ public:
 	// Add code here
 	bool rayIntersect(const Ray& r, float& t, float& u, float& v) const
 	{
-		Vec3 p = Cross(r.dir, e2);
+		float denom = Dot(n, r.dir);
+		if (denom == 0) { return false; }
+		t = (d - Dot(n, r.o)) / denom;
+		if (t < 0) { return false; }
+		Vec3 p = r.at(t);
+		float invArea = 1.0f / Dot(e1.cross(e2), n);
+		u = Dot(e1.cross(p - vertices[1].p), n) * invArea;
+		if (u < 0 || u > 1.0f) { return false; }
+		v = Dot(e2.cross(p - vertices[2].p), n) * invArea;
+		if (v < 0 || (u + v) > 1.0f) { return false; }
+		return true;
+
+		//Moller-Trumbore (some errors - not working)
+		//Vec3 p = Cross(r.dir, e2);
 		float det = p.dot(e1);
 
 		// parellel ray check
@@ -89,7 +102,7 @@ public:
 			return false;
 
 		float invDet = 1.0f / det;
-		Vec3 T = r.o - vertices[0].p;
+		Vec3 T = r.o - vertices[2].p;
 
 		u = T.dot(p) * invDet;
 
@@ -121,7 +134,23 @@ public:
 	// Add code here
 	Vec3 sample(Sampler* sampler, float& pdf)
 	{
-		return Vec3(0, 0, 0);
+		// generate random samples
+		float r1 = sampler->next();
+		float r2 = sampler->next();
+
+		// calculate barycentric coordinates
+		float rootr1 = sqrt(r1);
+		float alpha = 1 - rootr1;
+		float beta = r2 * rootr1;
+		float gamma = 1 - (alpha + beta);
+
+		// calculate interpolated coordinates 
+		Vec3 p = vertices[0].p * alpha + vertices[1].p * beta + vertices[2].p * gamma;
+
+		// calculate pdf
+		pdf = 1 / area;
+
+		return p;
 	}
 
 	Vec3 gNormal()
@@ -370,6 +399,7 @@ class BVH
 
 		// create child nodes
 		BVHNode child_l, child_r;
+		// if no split possible return (leaf node)
 		if (!splitNode(node, child_l, child_r))
 			return depth;
 
@@ -464,7 +494,6 @@ public:
 						float t, u, v;
 						if (triangles[index].rayIntersect(ray, t, u, v))
 						{
-							//collide = true;
 							if (t < intersection.t)
 							{
 								intersection.t = t;
@@ -499,7 +528,35 @@ public:
 
 	bool traverseVisible(const Ray& ray, const std::vector<Triangle>& triangles, const float maxT)
 	{
-		// Add visibility code here
+		std::stack<unsigned int> stack;
+		stack.push(0);
+
+		while (!stack.empty())
+		{
+			BVHNode& node = data[stack.top()];
+			stack.pop();
+
+			// check for leaf node to terminate recursion
+			if (node.bounds.rayAABB(ray))
+			{
+				if (node.isLeaf())
+				{
+					for (unsigned int index : node.triIndices)
+					{
+						float t, u, v;
+						if (triangles[index].rayIntersect(ray, t, u, v))
+							return false;
+					}
+				}
+				else
+				{
+					// recursive traversal call to child nodes
+					stack.push(node.child_l);
+					stack.push(node.child_r);
+				}
+			}
+		}
+
 		return true;
 	}
 };

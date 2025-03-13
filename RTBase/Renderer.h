@@ -19,7 +19,7 @@ public:
 	Scene* scene;
 	GamesEngineeringBase::Window* canvas;
 	Film* film;
-	MTRandom* samplers;
+	MTRandom** samplers;
 	std::thread** threads;
 
 	int numProcs;
@@ -36,12 +36,19 @@ public:
 	{
 		std::cout << "Cleaning Ray Tracer..." << std::endl;
 
+		// clean threads
 		if (threads != nullptr)
 			delete[] threads;
 
+		// clean samplers
 		if (samplers != nullptr)
+		{
+			for (unsigned int i = 0; i < numThreads; i++)
+				delete samplers[i];
 			delete[] samplers;
+		}
 
+		// clean film
 		if (film != nullptr)
 			delete film;
 	}
@@ -58,9 +65,20 @@ public:
 		GetSystemInfo(&sysInfo);
 		numProcs = sysInfo.dwNumberOfProcessors;
 
+		// calculate number of threads according to available processors
 		numThreads = max(1, min(_numThreads, numProcs));
+
+		// create threads and samplers for each thread
 		threads = new std::thread * [numThreads];
-		samplers = new MTRandom[numThreads];
+		samplers = new MTRandom * [numThreads];
+
+		// assign different seeds to each sampler
+		// Linear Congruential Generator used for seed
+		// x + 1 = [a * (x - 1) + c] % m
+		// where a = 48271, c = 0
+		int m = pow(2, 32) - 1;
+		for (unsigned int i = 0; i < numThreads; i++)
+			samplers[i] = new MTRandom((48271 * (i + 1)) % m);
 
 		totalXTiles = canvas->getWidth() / tileSize;
 		totalTiles = totalXTiles * canvas->getHeight() / tileSize;
@@ -150,7 +168,7 @@ public:
 		while ((i = tileCounter.fetch_add(1)) < totalTiles)
 		{
 			unsigned int startx = (i % totalXTiles) * tileSize;
-			unsigned int starty = (int(i) / int(totalXTiles)) * tileSize;
+			unsigned int starty = (i / totalXTiles) * tileSize;
 
 			unsigned int endx = min(startx + tileSize, film->width);
 			unsigned int endy = min(starty + tileSize, film->height);
@@ -162,9 +180,6 @@ public:
 					float px = x + 0.5f;
 					float py = y + 0.5f;
 					Ray ray = scene->camera.generateRay(px, py);
-
-					//if (!scene->bounds.rayAABB(ray))
-					//	continue;
 
 					Colour col = viewNormals(ray);
 					//Colour col = albedo(ray);
@@ -186,8 +201,6 @@ public:
 	/// <param name="numThreads">Number of threads to use (uses between 1 and max threads processor supports)</param>
 	void renderMT()
 	{
-		numThreads = max(1, min(numThreads, numProcs));
-
 		film->incrementSPP();
 		tileCounter.store(0);
 
