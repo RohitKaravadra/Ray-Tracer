@@ -70,6 +70,8 @@ int main(int argc, char* argv[])
 	rt.init(scene, &canvas, 10);
 	bool running = true;
 	GamesEngineeringBase::Timer timer;
+
+	std::cout << std::endl;
 	while (running)
 	{
 		canvas.checkInput();
@@ -89,7 +91,8 @@ int main(int argc, char* argv[])
 		rt.renderMT();
 		float t = timer.dt();
 		// Write
-		std::cout << t << std::endl;
+		std::cout << "\033[F" << "Time : " << t << " FPS : " << (t > 0 ? 1.0f / t : FLT_MAX) << std::endl;
+
 		if (canvas.keyPressed('P'))
 		{
 			rt.saveHDR(filename);
