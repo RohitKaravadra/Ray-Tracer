@@ -98,7 +98,7 @@ public:
 		float det = p.dot(e1);
 
 		// parellel ray check
-		if (std::abs(det) < epsilon)
+		if (std::fabs(det) < epsilon)
 			return false;
 
 		float invDet = 1.0f / det;
@@ -106,13 +106,13 @@ public:
 
 		u = T.dot(p) * invDet;
 
-		if ((u < 0 && abs(u) > epsilon) || (u > 1 && abs(u - 1) > epsilon))
+		if ((u < 0 && fabs(u) > epsilon) || (u > 1 && fabs(u - 1) > epsilon))
 			return false;
 
 		p = Cross(T, e1);
 		v = r.dir.dot(p) * invDet;
 
-		if ((v < 0 && abs(v) > epsilon) || (u + v > 1 && abs(u + v - 1) > epsilon))
+		if ((v < 0 && fabs(v) > epsilon) || (u + v > 1 && fabs(u + v - 1) > epsilon))
 			return false;
 
 		t = e2.dot(p) * invDet;
@@ -286,7 +286,7 @@ struct IntersectionData
 #define MAXNODE_TRIANGLES 8
 #define TRAVERSE_COST 1.0f
 #define TRIANGLE_COST 2.0f
-#define BUILD_BINS 32
+#define BUILD_BINS 15
 
 class BVHTree
 {
@@ -304,6 +304,7 @@ class BVHTree
 	unsigned int* indices;		// list of triangle indices for nodes
 
 	const int maxDepth = 50;	// maximum depth of BVH
+	const float invBuildBins = 1.0f / (float)BUILD_BINS;	// saves inverse BUILD_BINS for optimization
 
 	float calcCost(float pArea, float lArea, float rArea, unsigned int lNum, unsigned int rNum)
 	{
@@ -392,12 +393,9 @@ class BVHTree
 		if (nodes[node].end - nodes[node].start <= MAXNODE_TRIANGLES)
 			return false;
 
-		const unsigned int numTest = 5;			// number of split test
 		unsigned int bestAxis = 0;				// best axis to split
 		float bestPos = 0;						// best position to split	
 		float bestCost = FLT_MAX;				// best cost to split
-
-		float invNumTest = 1 / (float)numTest;	// inverse of number of test
 
 		// check for each axis
 		for (int axis = 0; axis < 3; axis++)
@@ -407,9 +405,9 @@ class BVHTree
 			float boundsEnd = nodes[node].bounds.max.coords[axis];
 
 			// check for each split
-			for (int i = 0; i < numTest; i++)
+			for (int i = 0; i < BUILD_BINS; i++)
 			{
-				float splitT = (i + 1) * invNumTest;
+				float splitT = (i + 1) * invBuildBins;
 
 				float pos = boundsStart + (boundsEnd - boundsStart) * splitT;	// calculate split position
 				float cost = evaluateSplit(node, axis, pos);					// calculate cost
@@ -594,7 +592,7 @@ public:
 					// check for intersection with triangle
 					if (triangles[index].rayIntersect(ray, t, u, v))
 						if (t <= maxT)
-							return true;
+							return false;
 				}
 			}
 			else
@@ -607,6 +605,6 @@ public:
 			}
 		}
 
-		return false;
+		return true;
 	}
 };

@@ -10,7 +10,8 @@
 #include "GamesEngineeringBase.h"
 #include <thread>
 #include <functional>
-#include <mutex>
+
+#define MAX_DEPTH 5
 
 class RayTracer
 {
@@ -29,8 +30,6 @@ public:
 	unsigned int totalXTiles;
 	const unsigned int tileSize = 16;
 	std::atomic<unsigned int> tileCounter;
-
-	std::mutex mtx;
 
 	~RayTracer()
 	{
@@ -95,25 +94,122 @@ public:
 
 	Colour computeDirect(ShadingData shadingData, Sampler* sampler)
 	{
-		// Is surface is specular we cannot computing direct lighting
 		if (shadingData.bsdf->isPureSpecular() == true)
 		{
 			return Colour(0.0f, 0.0f, 0.0f);
 		}
-		// Compute direct lighting here
-		return Colour(0.0f, 0.0f, 0.0f);
-	}
 
-	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler)
-	{
-		// Add pathtracer code here
+		// Sample a light
+		float pmf;
+		Light* light = scene->sampleLight(sampler, pmf);
+
+		// Sample a point on the light
+		float pdf;
+		Colour emitted;
+		Vec3 p = light->sample(shadingData, sampler, emitted, pdf);
+
+		if (light->isArea())
+		{
+			// Calculate G Term
+			Vec3 wi = p - shadingData.x;
+			float l = wi.lengthSq();
+			wi = wi.normalize();
+
+			float gTerm = (max(Dot(wi, shadingData.sNormal), 0.0f) * max(-Dot(wi, light->normal(shadingData, wi)), 0.0f)) / l;
+
+			if (gTerm > 0)
+			{
+				// Trace
+				if (scene->visible(shadingData.x, p))
+				{
+					// Shade
+					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm / (pmf * pdf);
+				}
+			}
+		}
+		else
+		{
+			// Calculate G Term
+			Vec3 wi = p;
+			float gTerm = max(Dot(wi, shadingData.sNormal), 0.0f);
+			if (gTerm > 0)
+			{
+				// Trace
+				if (scene->visible(shadingData.x, shadingData.x + (p * 10000.0f)))
+				{
+					// Shade
+					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm / (pmf * pdf);
+				}
+			}
+		}
+
 		return Colour(0.0f, 0.0f, 0.0f);
 	}
 
 	Colour direct(Ray& r, Sampler* sampler)
 	{
-		// Compute direct lighting for an image sampler here
-		return Colour(0.0f, 0.0f, 0.0f);
+		IntersectionData intersection = scene->traverse(r);
+		ShadingData shadingData = scene->calculateShadingData(intersection, r);
+		if (shadingData.t < FLT_MAX)
+		{
+			if (shadingData.bsdf->isLight())
+			{
+				return shadingData.bsdf->emit(shadingData, shadingData.wo);
+			}
+			return computeDirect(shadingData, sampler);
+		}
+		return scene->background->evaluate(shadingData, r.dir);
+	}
+
+	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, bool canHitLight = true)
+	{
+		IntersectionData intersection = scene->traverse(r);
+		ShadingData shadingData = scene->calculateShadingData(intersection, r);
+
+		if (shadingData.t < FLT_MAX)
+		{
+			if (shadingData.bsdf->isLight())
+			{
+				return canHitLight ? pathThroughput * shadingData.bsdf->emit(shadingData, shadingData.wo)
+					: Colour(0.0f, 0.0f, 0.0f);
+			}
+
+			// calculate direct lighting
+			Colour direct = pathThroughput * computeDirect(shadingData, sampler);
+
+			if (depth > MAX_DEPTH) return direct;
+
+			// russian roulette
+			float russianRouletteProbability = min(pathThroughput.Lum(), 0.9f);
+
+			if (sampler->next() < russianRouletteProbability)
+				pathThroughput = pathThroughput / russianRouletteProbability;
+			else
+				return direct;
+
+			Colour bsdf;
+			float pdf;
+			Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
+			pdf = SamplingDistributions::cosineHemispherePDF(wi);
+
+			wi = shadingData.frame.toWorld(wi);
+			bsdf = shadingData.bsdf->evaluate(shadingData, wi);
+
+			pathThroughput = pathThroughput * bsdf * fabsf(wi.dot(shadingData.sNormal)) / pdf;
+			r.init(shadingData.x + (wi * EPSILON), wi);
+
+			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, shadingData.bsdf->isPureSpecular());
+		}
+
+		return scene->background->evaluate(shadingData, r.dir);
+	}
+
+	Colour pathTrace(unsigned int x, unsigned int y, Sampler* sampler)
+	{
+		Ray ray = scene->camera.generateRay(x + sampler->next(), y + sampler->next());
+
+		Colour pathThroughput(1.0f, 1.0f, 1.0f);
+		return pathTrace(ray, pathThroughput, 0, sampler);
 	}
 
 	Colour albedo(Ray& r)
@@ -152,17 +248,22 @@ public:
 				float px = x + 0.5f;
 				float py = y + 0.5f;
 				Ray ray = scene->camera.generateRay(px, py);
+
 				//Colour col = viewNormals(ray);
-				Colour col = albedo(ray);
+				//Colour col = albedo(ray);
+				//Colour col = direct(ray, samplers[id]);
+				Colour col = pathTrace(x, y, samplers[0]);
+
 				film->splat(px, py, col);
 				unsigned char r, g, b;
 				film->tonemap(x, y, r, g, b);
+
 				canvas->draw(x, y, r, g, b);
 			}
 		}
 	}
 
-	void processTile()
+	void processTile(unsigned int id)
 	{
 		unsigned int i;
 		while ((i = tileCounter.fetch_add(1)) < totalTiles)
@@ -181,17 +282,18 @@ public:
 					float py = y + 0.5f;
 					Ray ray = scene->camera.generateRay(px, py);
 
-					Colour col = viewNormals(ray);
+					//Colour col = viewNormals(ray);
 					//Colour col = albedo(ray);
+					//Colour col = direct(ray, samplers[id]);
+					Colour col = pathTrace(x, y, samplers[id]);
+
 					film->splat(px, py, col);
 					unsigned char r, g, b;
 					film->tonemap(x, y, r, g, b);
+
 					canvas->draw(x, y, r, g, b);
 				}
 			}
-			//mtx.lock();
-			//canvas->present();
-			//mtx.unlock();
 		}
 	}
 
@@ -205,7 +307,7 @@ public:
 		tileCounter.store(0);
 
 		for (int i = 0; i < numThreads; i++)
-			threads[i] = new std::thread(&RayTracer::processTile, this);
+			threads[i] = new std::thread(&RayTracer::processTile, this, i);
 
 		for (int i = 0; i < numThreads; i++)
 		{

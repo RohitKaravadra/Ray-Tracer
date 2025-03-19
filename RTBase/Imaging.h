@@ -222,6 +222,13 @@ public:
 	unsigned int height;
 	int SPP;
 	ImageFilter* filter;
+
+	~Film()
+	{
+		delete[] film;
+		delete filter;
+	}
+
 	void splat(const float x, const float y, const Colour& L)
 	{
 		float filterWeights[25]; // Storage to cache weights
