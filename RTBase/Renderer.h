@@ -297,10 +297,6 @@ public:
 		}
 	}
 
-	/// <summary>
-	/// Render using multiple threads and segments
-	/// </summary>
-	/// <param name="numThreads">Number of threads to use (uses between 1 and max threads processor supports)</param>
 	void renderMT()
 	{
 		film->incrementSPP();

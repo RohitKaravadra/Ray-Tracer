@@ -1,3 +1,36 @@
 ﻿  pch.cpp
   test.cpp
-  UnitTests.vcxproj -> C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\x64\Release\UnitTests.exe
+C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\UnitTests\test.cpp(64,2): error C2039: 'center': is not a member of 'AABB'
+  (compiling source file '/test.cpp')
+      C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\RTBase\Geometry.h(162,7):
+      see declaration of 'AABB'
+  
+C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\UnitTests\test.cpp(64,2): error C2512: 'testing::AssertionResult': no appropriate default constructor available
+  (compiling source file '/test.cpp')
+      C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\UnitTests\test.cpp(64,2):
+      'testing::AssertionResult::AssertionResult': no appropriate default constructor available
+          C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\packages\Microsoft.googletest.v140.windesktop.msvcstl.static.rt-dyn.1.8.1.7\build\native\include\gtest\gtest.h(299,3):
+          could be 'testing::AssertionResult::AssertionResult(const T &,internal::EnableIf<!testing::internal::ImplicitlyConvertible<T,testing::AssertionResult>::value>::type *)'
+          C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\UnitTests\test.cpp(64,2):
+          while trying to match the argument list '()'
+  
+C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\UnitTests\test.cpp(64,2): error C2737: 'gtest_ar_': const object must be initialized
+  (compiling source file '/test.cpp')
+  
+C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\UnitTests\test.cpp(73,2): error C2039: 'center': is not a member of 'AABB'
+  (compiling source file '/test.cpp')
+      C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\RTBase\Geometry.h(162,7):
+      see declaration of 'AABB'
+  
+C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\UnitTests\test.cpp(73,2): error C2512: 'testing::AssertionResult': no appropriate default constructor available
+  (compiling source file '/test.cpp')
+      C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\UnitTests\test.cpp(73,2):
+      'testing::AssertionResult::AssertionResult': no appropriate default constructor available
+          C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\packages\Microsoft.googletest.v140.windesktop.msvcstl.static.rt-dyn.1.8.1.7\build\native\include\gtest\gtest.h(299,3):
+          could be 'testing::AssertionResult::AssertionResult(const T &,internal::EnableIf<!testing::internal::ImplicitlyConvertible<T,testing::AssertionResult>::value>::type *)'
+          C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\UnitTests\test.cpp(73,2):
+          while trying to match the argument list '()'
+  
+C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\UnitTests\test.cpp(73,2): error C2737: 'gtest_ar_': const object must be initialized
+  (compiling source file '/test.cpp')
+  

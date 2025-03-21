@@ -6,10 +6,24 @@
 #define NOMINMAX
 #include "GamesEngineeringBase.h"
 #include <unordered_map>
+#include <iomanip>
 
 void runTests()
 {
 	// Add test code here
+}
+
+std::string formatTime(int seconds) {
+	int hours = seconds / 3600;
+	int minutes = (seconds % 3600) / 60;
+	int secs = seconds % 60;
+
+	std::ostringstream formattedTime;
+	formattedTime << std::setw(2) << std::setfill('0') << hours << ":"
+		<< std::setw(2) << std::setfill('0') << minutes << ":"
+		<< std::setw(2) << std::setfill('0') << secs;
+
+	return formattedTime.str();
 }
 
 int main(int argc, char* argv[])
@@ -18,7 +32,7 @@ int main(int argc, char* argv[])
 	// runTests()
 
 	// Initialize default parameters
-	std::string sceneName = "scenes/cornell-box";
+	std::string sceneName = "scenes/living-room-2";
 	std::string filename = "GI.hdr";
 	unsigned int SPP = 8192;
 
@@ -62,6 +76,7 @@ int main(int argc, char* argv[])
 			}
 		}
 	}
+
 	RTCamera viewcamera;
 	Scene* scene = loadScene(sceneName, viewcamera);
 	GamesEngineeringBase::Window canvas;
@@ -72,6 +87,7 @@ int main(int argc, char* argv[])
 	GamesEngineeringBase::Timer timer;
 
 	std::cout << std::endl;
+	float totalTime = 0;
 	while (running)
 	{
 		canvas.checkInput();
@@ -83,19 +99,31 @@ int main(int argc, char* argv[])
 		}
 
 		canvas.clear();
+
+		// Update camera and check if it has changed (reset if it has)
 		if (viewcamera.update(canvas))
+		{
 			rt.clear();
+			totalTime = 0;
+		}
 
 		// Time how long a render call takes
 		timer.reset();
 		rt.renderMT();
 		float t = timer.dt();
-		// Write
-		std::cout << "\033[F" << "Time : " << t << " FPS : " << (t > 0 ? 1.0f / t : FLT_MAX) << std::endl;
+
+		totalTime += t; // update total time
+
+		// Write stats to console
+		std::cout << "Samples    : " << rt.getSPP() << std::endl;
+		std::cout << "Time       : " << t << std::endl;
+		std::cout << "FPS        : " << (t > 0 ? 1.0f / t : FLT_MAX) << std::endl;
+		std::cout << "Total time : " << formatTime(totalTime) << std::endl;
+		std::cout << "\033[F\033[F\033[F\033[F";
 
 		if (canvas.keyPressed('P'))
 		{
-			rt.saveHDR(filename);
+			rt.savePNG(filename);
 		}
 		if (canvas.keyPressed('L'))
 		{
