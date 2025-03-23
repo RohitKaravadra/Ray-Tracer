@@ -145,8 +145,6 @@ public:
 			totalLum += rowSum;
 		}
 
-		std::cout << "Total Luminance of the distribution is : " << totalLum << std::endl;
-
 		// Normalize cdfCols (convert to cumulative distribution)
 		for (int i = 0; i < height; i++)
 		{
@@ -244,13 +242,14 @@ public:
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
 	{
-		// uniform sphere sampling
 		Vec3 wi1 = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
 		float pdf1 = SamplingDistributions::uniformSpherePDF(wi1);
 		Colour le1 = evaluate(shadingData, wi1);
-		// pdf = pdf1;
-		// reflectedColour = le1;
-		// return wi1;
+
+		// for testing
+		pdf = pdf1;
+		reflectedColour = le1;
+		return wi1;
 
 		// tabulated distribution sampling
 		float u, v, pdf2;
@@ -278,7 +277,6 @@ public:
 		u = (u < 0.0f) ? u + (2.0f * M_PI) : u;
 		u = u / (2.0f * M_PI);
 		float v = acosf(wi.y) / M_PI;
-
 		return env->sample(u, v);
 	}
 

@@ -115,7 +115,7 @@ public:
 			float l = wi.lengthSq();
 			wi = wi.normalize();
 
-			float gTerm = (max(Dot(wi, shadingData.sNormal), 0.0f) * max(-Dot(wi, light->normal(shadingData, wi)), 0.0f)) / l;
+			float gTerm = (max(Dot(wi, shadingData.sNormal) * -Dot(wi, light->normal(shadingData, wi)), 0.0f)) / l;
 
 			if (gTerm > 0)
 			{
@@ -158,7 +158,7 @@ public:
 			}
 			return computeDirect(shadingData, sampler);
 		}
-		return scene->background->evaluate(shadingData, r.dir);
+		return Colour(0.0f, 0.0f, 0.0f);
 	}
 
 	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, bool canHitLight = true)
@@ -187,17 +187,23 @@ public:
 			else
 				return direct;
 
+			// sample new direction
 			Colour bsdf;
 			float pdf;
 			Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
 			pdf = SamplingDistributions::cosineHemispherePDF(wi);
 
+			// convert to world space
 			wi = shadingData.frame.toWorld(wi);
+			// evaluate BSDF
 			bsdf = shadingData.bsdf->evaluate(shadingData, wi);
 
+			// calculate throughput
 			pathThroughput = pathThroughput * bsdf * fabsf(wi.dot(shadingData.sNormal)) / pdf;
+			// create new ray
 			r.init(shadingData.x + (wi * EPSILON), wi);
 
+			// trace new ray
 			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, shadingData.bsdf->isPureSpecular());
 		}
 
@@ -251,8 +257,8 @@ public:
 
 				//Colour col = viewNormals(ray);
 				//Colour col = albedo(ray);
-				//Colour col = direct(ray, samplers[id]);
-				Colour col = pathTrace(x, y, samplers[0]);
+				Colour col = direct(ray, samplers[0]);
+				//Colour col = pathTrace(x, y, samplers[0]);
 
 				film->splat(px, py, col);
 				unsigned char r, g, b;
@@ -284,8 +290,8 @@ public:
 
 					//Colour col = viewNormals(ray);
 					//Colour col = albedo(ray);
-					//Colour col = direct(ray, samplers[id]);
-					Colour col = pathTrace(x, y, samplers[id]);
+					Colour col = direct(ray, samplers[id]);
+					//Colour col = pathTrace(x, y, samplers[id]);
 
 					film->splat(px, py, col);
 					unsigned char r, g, b;

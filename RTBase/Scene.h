@@ -117,7 +117,8 @@ public:
 	Light* sampleLight(Sampler* sampler, float& pmf)
 	{
 		pmf = 1 / (float)lights.size();		// probability mass function
-		return lights[sampler->next() * (lights.size() - 1)];
+		unsigned int i = sampler->next() * (lights.size() - 1);
+		return lights[i];
 	}
 	// Do not modify any code below this line
 	void init(std::vector<Triangle> meshTriangles, std::vector<BSDF*> meshMaterials, Light* _background)

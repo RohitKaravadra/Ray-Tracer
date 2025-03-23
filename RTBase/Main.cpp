@@ -32,7 +32,7 @@ int main(int argc, char* argv[])
 	// runTests()
 
 	// Initialize default parameters
-	std::string sceneName = "scenes/living-room-2";
+	std::string sceneName = "scenes/dining-room";
 	std::string filename = "GI.hdr";
 	unsigned int SPP = 8192;
 
@@ -77,21 +77,30 @@ int main(int argc, char* argv[])
 		}
 	}
 
+	// Load scene and camera
 	RTCamera viewcamera;
 	Scene* scene = loadScene(sceneName, viewcamera);
+
+	// Create canvas
 	GamesEngineeringBase::Window canvas;
 	canvas.create((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, "Tracer", 1.0f);
-	RayTracer rt;
-	rt.init(scene, &canvas, 10);
-	bool running = true;
-	GamesEngineeringBase::Timer timer;
 
-	std::cout << std::endl;
+	// Create ray tracer
+	RayTracer rt;
+	rt.init(scene, &canvas, 10);	// 10 threads
+
+	// Create timer
+	GamesEngineeringBase::Timer timer;
 	float totalTime = 0;
+
+	std::cout << "\n\n\n\n";
+	bool running = true;
+
 	while (running)
 	{
-		canvas.checkInput();
+		canvas.checkInput(); // Check for input
 
+		// Check if the user wants to quit
 		if (canvas.isQuit() || canvas.keyPressed(VK_ESCAPE))
 		{
 			running = false;
@@ -115,11 +124,11 @@ int main(int argc, char* argv[])
 		totalTime += t; // update total time
 
 		// Write stats to console
+		std::cout << "\033[F\033[F\033[F\033[F";
 		std::cout << "Samples    : " << rt.getSPP() << std::endl;
 		std::cout << "Time       : " << t << std::endl;
 		std::cout << "FPS        : " << (t > 0 ? 1.0f / t : FLT_MAX) << std::endl;
 		std::cout << "Total time : " << formatTime(totalTime) << std::endl;
-		std::cout << "\033[F\033[F\033[F\033[F";
 
 		if (canvas.keyPressed('P'))
 		{
@@ -134,7 +143,7 @@ int main(int argc, char* argv[])
 		if (SPP == rt.getSPP())
 		{
 			rt.saveHDR(filename);
-			break;
+			running = false;
 		}
 		canvas.present();
 	}
