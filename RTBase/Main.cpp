@@ -128,7 +128,7 @@ int main(int argc, char* argv[])
 		canvas.checkInput(); // Check for input
 
 		// Check if the user wants to quit
-		if (canvas.isQuit() || canvas.keyPressed(VK_ESCAPE))
+		if (canvas.isQuitRequested() || canvas.keyPressed(VK_ESCAPE))
 		{
 			running = false;
 			continue;
