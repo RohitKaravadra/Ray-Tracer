@@ -235,6 +235,13 @@ public:
 		return pdf < EPSILON ? EPSILON : pdf;
 	}
 
+	float getPdf(float u, float v)
+	{
+		int row = binarySearch(cdfRows, height, v);
+		int col = binarySearch(cdfCols[row], width, u);
+		return getPdf(row, col);
+	}
+
 	Vec3 sample(Sampler* sampler, float& u, float& v, float& pdf)
 	{
 		int row = binarySearch(cdfRows, height, sampler->next());		// calculate row
@@ -276,35 +283,26 @@ public:
 		tabDist.init(env);
 	}
 
+	Vec3 sampleSpherical(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	{
+		Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
+		pdf = SamplingDistributions::uniformSpherePDF(wi);
+		reflectedColour = evaluate(shadingData, wi);
+		return wi;
+	}
+
+	Vec3 sampleTabulated(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	{
+		float u, v;
+		Vec3 wi = tabDist.sample(sampler, u, v, pdf);
+		reflectedColour = evaluate(shadingData, wi);
+		return wi;
+	}
+
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
 	{
-		Vec3 wi1 = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
-		float pdf1 = SamplingDistributions::uniformSpherePDF(wi1);
-		Colour le1 = evaluate(shadingData, wi1);
-
-		// for testing
-		pdf = pdf1;
-		reflectedColour = le1;
-		return wi1;
-
-		// tabulated distribution sampling
-		float u, v, pdf2;
-		Vec3 wi2 = tabDist.sample(sampler, u, v, pdf2);
-		Colour le2 = evaluate(shadingData, wi2);
-
-		// calculate weights
-		float invPdfSum = 1 / (pdf2 + pdf1);
-		float w2 = pdf2 * invPdfSum;
-		float w1 = pdf1 * invPdfSum;
-
-		// calculate pdf
-		pdf = (pdf2 * w2) + (pdf1 * w1);
-
-		// calculate reflected colour
-		reflectedColour = (le2 * w2) + (le1 * w1);
-
-		// return direction
-		return (sampler->next() < 0.5f) ? wi2 : wi1;
+		//return sampleSpherical(shadingData, sampler, reflectedColour, pdf);
+		return sampleTabulated(shadingData, sampler, reflectedColour, pdf);
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
@@ -319,7 +317,11 @@ public:
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Assignment: Update this code to return the correct PDF of luminance weighted importance sampling
-		return SamplingDistributions::uniformSpherePDF(wi);
+		float u = atan2f(wi.z, wi.x);
+		u = (u < 0.0f) ? u + (2.0f * M_PI) : u;
+		u = u / (2.0f * M_PI);
+		float v = acosf(wi.y) / M_PI;
+		return tabDist.getPdf(u, v);
 	}
 
 	bool isArea()
@@ -357,8 +359,12 @@ public:
 	}
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf)
 	{
+		float u, v;
+		Vec3 wi = tabDist.sample(sampler, u, v, pdf);
+		return wi;
+
 		// Replace this tabulated sampling of environment maps
-		Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
+		//Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
 		pdf = SamplingDistributions::uniformSpherePDF(wi);
 		return wi;
 	}

@@ -13,6 +13,20 @@
 
 #define MAX_DEPTH 5
 
+enum DRAWMODE
+{
+	DM_NORMALS = 0,
+	DM_ALBEDO = 1,
+	DM_DIRECT = 2,
+	DM_PATHTRACE = 3
+};
+
+struct LastData
+{
+	Colour bsdf;
+	float pdf;
+};
+
 class RayTracer
 {
 
@@ -30,6 +44,8 @@ public:
 	unsigned int totalXTiles;
 	const unsigned int tileSize = 16;
 	std::atomic<unsigned int> tileCounter;
+
+	DRAWMODE drawMode = DM_ALBEDO;
 
 	~RayTracer()
 	{
@@ -130,7 +146,7 @@ public:
 		else
 		{
 			// Calculate G Term
-			Vec3 wi = p;
+			Vec3 wi = p.normalize();
 			float gTerm = max(Dot(wi, shadingData.sNormal), 0.0f);
 			if (gTerm > 0)
 			{
@@ -158,10 +174,10 @@ public:
 			}
 			return computeDirect(shadingData, sampler);
 		}
-		return Colour(0.0f, 0.0f, 0.0f);
+		return scene->background->evaluate(shadingData, r.dir);
 	}
 
-	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, bool canHitLight = true)
+	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, LastData& lastData, bool canHitLight = true)
 	{
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
@@ -190,24 +206,31 @@ public:
 			// sample new direction
 			Colour bsdf;
 			float pdf;
-			Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
-			pdf = SamplingDistributions::cosineHemispherePDF(wi);
-
-			// convert to world space
-			wi = shadingData.frame.toWorld(wi);
-			// evaluate BSDF
-			bsdf = shadingData.bsdf->evaluate(shadingData, wi);
+			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, bsdf, pdf);
 
 			// calculate throughput
 			pathThroughput = pathThroughput * bsdf * fabsf(wi.dot(shadingData.sNormal)) / pdf;
 			// create new ray
 			r.init(shadingData.x + (wi * EPSILON), wi);
 
+			// store last data
+			lastData.bsdf = bsdf;
+			lastData.pdf = pdf;
+
 			// trace new ray
-			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, shadingData.bsdf->isPureSpecular());
+			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, lastData, shadingData.bsdf->isPureSpecular());
 		}
 
-		return scene->background->evaluate(shadingData, r.dir);
+		Colour bkColour = scene->background->evaluate(shadingData, r.dir);
+		if (depth <= 0)
+			return bkColour;
+
+		float bkPdf = scene->background->PDF(shadingData, r.dir);
+
+		float total = lastData.pdf + bkPdf;
+		float w1 = bkPdf / total;
+		float w2 = lastData.pdf / total;
+		return (bkColour * w1 + lastData.bsdf * w2) * pathThroughput;
 	}
 
 	Colour pathTrace(unsigned int x, unsigned int y, Sampler* sampler)
@@ -215,7 +238,8 @@ public:
 		Ray ray = scene->camera.generateRay(x + sampler->next(), y + sampler->next());
 
 		Colour pathThroughput(1.0f, 1.0f, 1.0f);
-		return pathTrace(ray, pathThroughput, 0, sampler);
+		LastData lastData;
+		return pathTrace(ray, pathThroughput, 0, sampler, lastData);
 	}
 
 	Colour albedo(Ray& r)
@@ -288,10 +312,22 @@ public:
 					float py = y + 0.5f;
 					Ray ray = scene->camera.generateRay(px, py);
 
-					//Colour col = viewNormals(ray);
-					//Colour col = albedo(ray);
-					Colour col = direct(ray, samplers[id]);
-					//Colour col = pathTrace(x, y, samplers[id]);
+					Colour col;
+					switch (drawMode)
+					{
+					case DM_NORMALS:
+						col = viewNormals(ray);
+						break;
+					case DM_ALBEDO:
+						col = albedo(ray);
+						break;
+					case DM_DIRECT:
+						col = direct(ray, samplers[id]);
+						break;
+					case DM_PATHTRACE:
+						col = pathTrace(x, y, samplers[id]);
+						break;
+					}
 
 					film->splat(px, py, col);
 					unsigned char r, g, b;

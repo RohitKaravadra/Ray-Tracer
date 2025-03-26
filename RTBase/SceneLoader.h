@@ -23,17 +23,15 @@ public:
 
 	void forward()
 	{
-		Vec3 dir = to - from;
-		dir = dir.normalize() * movespeed;
-		from = from + dir;
+		Vec3 dir = (to - from).normalize();
+		from = from + dir * movespeed;
 		to = from + dir;
 	}
 
 	void back()
 	{
-		Vec3 dir = to - from;
-		dir = dir.normalize() * movespeed;
-		from = from - dir;
+		Vec3 dir = (to - from).normalize();
+		from = from - dir * movespeed;
 		to = from + dir;
 	}
 

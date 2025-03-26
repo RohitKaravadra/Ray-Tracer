@@ -94,6 +94,8 @@ public:
 	// Add code here
 	bool rayIntersect(const Ray& r, float& t, float& u, float& v) const
 	{
+		// moeller trumbore intersection algorithm
+
 		Vec3 p = Cross(r.dir, e2);
 		float det = p.dot(e1);
 
@@ -139,7 +141,7 @@ public:
 		float r2 = sampler->next();
 
 		// calculate barycentric coordinates
-		float rootr1 = sqrt(r1);
+		float rootr1 = sqrtf(r1);
 		float alpha = 1 - rootr1;
 		float beta = r2 * rootr1;
 		float gamma = 1 - (alpha + beta);
@@ -264,8 +266,8 @@ public:
 		else								// two intersection
 		{
 			float q = (b > 0) ?
-				-0.5 * (b + sqrt(dis)) :
-				-0.5 * (b - sqrt(dis));
+				-0.5 * (b + sqrtf(dis)) :
+				-0.5 * (b - sqrtf(dis));
 
 			t = std::min(q / a, c / q);
 		}

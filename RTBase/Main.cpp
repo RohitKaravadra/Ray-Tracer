@@ -31,8 +31,34 @@ int main(int argc, char* argv[])
 	// Add call to tests if required
 	// runTests()
 
+	// scene names
+	std::string scenes[] = { "cornell-box",		// 0
+							"bathroom",			// 1
+							"bathroom2",		// 2
+							"bedroom",			// 3
+							"classroom",		// 4
+							"coffee",			// 5
+							"dining-room",		// 6		
+							"glass-of-water",	// 7
+							"house",			// 8
+							"kitchen",			// 9
+							"living-room",		// 10		
+							"living-room-2",	// 11
+							"living-room-3",	// 12
+							"Sibenik",			// 13	
+							"staircase",		// 14	
+							"staircase2",		// 15		
+							"Terrain",			// 16	
+							"veach-bidir",		// 17		
+							"veach-mis",		// 18	
+							"MaterialsScene"	// 19 
+	};
+
 	// Initialize default parameters
-	std::string sceneName = "scenes/dining-room";
+	unsigned int sceneNum = 19;
+	DRAWMODE drawMode = DM_PATHTRACE;
+
+	std::string sceneName = "scenes/" + scenes[sceneNum];
 	std::string filename = "GI.hdr";
 	unsigned int SPP = 8192;
 
@@ -88,6 +114,7 @@ int main(int argc, char* argv[])
 	// Create ray tracer
 	RayTracer rt;
 	rt.init(scene, &canvas, 10);	// 10 threads
+	rt.drawMode = drawMode;
 
 	// Create timer
 	GamesEngineeringBase::Timer timer;
