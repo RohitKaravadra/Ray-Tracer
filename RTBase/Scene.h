@@ -39,11 +39,26 @@ public:
 		viewDirection = camera.mulVec(viewDirection);
 		viewDirection = viewDirection.normalize();
 	}
-	// Add code here
+
+	/// <summary>
+	/// Geberates a ray from camera origin
+	/// </summary>
+	/// <param name="x"> x coordinate of screen pixel </param>
+	/// <param name="y"> y coordinate of screen pixel</param>
+	/// <returns> A ray from camera origin with direction to the point on near plane </returns>
 	Ray generateRay(float x, float y)
 	{
-		Vec3 dir(0, 0, 1);
-		return Ray(origin, dir);
+		// screen to clip space
+		x = (2 * x) / (width - 1) - 1;
+		y = 1 - (2 * y) / (height - 1);
+
+		// homogeneous coordinates
+		Vec3 point(x, y, 0, 1);
+
+		point = inverseProjectionMatrix.mulPointAndPerspectiveDivide(point);	// clip to camera space
+		point = camera.mulPointAndPerspectiveDivide(point);						// camera to world space
+
+		return Ray(origin, (point - origin).normalize());						// create and return ray
 	}
 	bool projectOntoCamera(const Vec3& p, float& x, float& y)
 	{
@@ -69,13 +84,20 @@ public:
 	std::vector<BSDF*> materials;
 	std::vector<Light*> lights;
 	Light* background = NULL;
-	BVHNode* bvh = NULL;
+	BVHTree bvh;
 	Camera camera;
 	AABB bounds;
+
+	~Scene()
+	{
+		delete background;
+	}
+
 	void build()
 	{
 		// Add BVH building code here
-		
+		bvh.build(triangles, bounds);
+
 		// Do not touch the code below this line!
 		// Build light list
 		for (int i = 0; i < triangles.size(); i++)
@@ -89,7 +111,8 @@ public:
 			}
 		}
 	}
-	IntersectionData traverse(const Ray& ray)
+
+	IntersectionData traverseAll(const Ray& ray)
 	{
 		IntersectionData intersection;
 		intersection.t = FLT_MAX;
@@ -112,9 +135,18 @@ public:
 		}
 		return intersection;
 	}
+
+	IntersectionData traverse(const Ray& ray)
+	{
+		//return traverseAll(ray);
+		return bvh.traverse(ray);
+	}
+
 	Light* sampleLight(Sampler* sampler, float& pmf)
 	{
-		return NULL;
+		pmf = 1 / (float)lights.size();		// probability mass function
+		unsigned int i = sampler->next() * (lights.size() - 1);
+		return lights[i];
 	}
 	// Do not modify any code below this line
 	void init(std::vector<Triangle> meshTriangles, std::vector<BSDF*> meshMaterials, Light* _background)
@@ -143,7 +175,7 @@ public:
 		float maxT = dir.length() - (2.0f * EPSILON);
 		dir = dir.normalize();
 		ray.init(p1 + (dir * EPSILON), dir);
-		return bvh->traverseVisible(ray, triangles, maxT);
+		return bvh.traverseVisible(ray, maxT);
 	}
 	Colour emit(Triangle* light, ShadingData shadingData, Vec3 wi)
 	{
@@ -172,7 +204,8 @@ public:
 			}
 			shadingData.frame.fromVector(shadingData.sNormal);
 			shadingData.t = intersection.t;
-		} else
+		}
+		else
 		{
 			shadingData.wo = -ray.dir;
 			shadingData.t = intersection.t;

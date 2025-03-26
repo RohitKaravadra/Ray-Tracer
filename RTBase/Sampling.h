@@ -12,16 +12,19 @@ public:
 
 class MTRandom : public Sampler
 {
+	float epsilon = 1e-7f;
 public:
 	std::mt19937 generator;
 	std::uniform_real_distribution<float> dist;
+
 	MTRandom(unsigned int seed = 1) : dist(0.0f, 1.0f)
 	{
 		generator.seed(seed);
 	}
 	float next()
 	{
-		return dist(generator);
+		float r = dist(generator);
+		return r < epsilon ? epsilon : r;
 	}
 };
 
@@ -31,32 +34,44 @@ class SamplingDistributions
 public:
 	static Vec3 uniformSampleHemisphere(float r1, float r2)
 	{
-		// Add code here
-		return Vec3(0, 0, 1);
+		float theta = acosf(r1);
+		float phy = M_PI * 2 * r2;
+		float st = sinf(theta);
+		return Vec3(st * cosf(phy), st * sinf(phy), r1);
 	}
+
 	static float uniformHemispherePDF(const Vec3 wi)
 	{
 		// Add code here
-		return 1.0f;
+		return 1.0f / (2 * M_PI);
 	}
+
 	static Vec3 cosineSampleHemisphere(float r1, float r2)
 	{
-		// Add code here
-		return Vec3(0, 0, 1);
+		r1 = sqrtf(r1);
+		float theta = acosf(r1);
+		float phy = M_PI * 2 * r2;
+		float st = sinf(theta);
+		return Vec3(st * cosf(phy), st * sinf(phy), r1);
 	}
+
 	static float cosineHemispherePDF(const Vec3 wi)
 	{
 		// Add code here
-		return 1.0f;
+		return wi.z / M_PI;
 	}
+
 	static Vec3 uniformSampleSphere(float r1, float r2)
 	{
-		// Add code here
-		return Vec3(0, 0, 1);
+		float theta = acosf(1 - 2 * r1);
+		float phy = M_PI * 2 * r2;
+		float st = sinf(theta);
+		return Vec3(st * cosf(phy), st * sinf(phy), 1 - 2 * r1);
 	}
+
 	static float uniformSpherePDF(const Vec3& wi)
 	{
 		// Add code here
-		return 1.0f;
+		return 1.0f / (4 * M_PI);
 	}
 };
