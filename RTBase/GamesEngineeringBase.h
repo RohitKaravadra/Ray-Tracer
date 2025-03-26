@@ -90,8 +90,6 @@ namespace GamesEngineeringBase
 		unsigned int height = 0;                 // Window height
 		unsigned int paddedDataSize = 0;         // Padding for backbuffer memory allocation
 
-		bool quit;								 // to check if user is trying to close the window (helps in cleaning up instead of closing application directly)
-
 		// Static window procedure to handle window messages
 		static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		{
@@ -101,8 +99,7 @@ namespace GamesEngineeringBase
 				// On window creation, associate the Window instance with the HWND
 				canvas = reinterpret_cast<Window*>(((LPCREATESTRUCT)lParam)->lpCreateParams);
 				SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)canvas);
-			}
-			else
+			} else
 			{
 				// Retrieve the Window instance associated with the HWND
 				canvas = reinterpret_cast<Window*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
@@ -124,17 +121,12 @@ namespace GamesEngineeringBase
 		{
 			switch (msg)
 			{
-				//case WM_DESTROY:
-				//case WM_CLOSE:
-				//{
-				//	// Handle window close/destroy messages
-				//	PostQuitMessage(0);
-				//	exit(0);
-				//	return 0;
-				//}
+			case WM_DESTROY:
 			case WM_CLOSE:
 			{
-				quit = true;
+				// Handle window close/destroy messages
+				PostQuitMessage(0);
+				exit(0);
 				return 0;
 			}
 			case WM_KEYDOWN:
@@ -266,8 +258,7 @@ namespace GamesEngineeringBase
 				fs.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
 				ChangeDisplaySettings(&fs, CDS_FULLSCREEN);
 				style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP;
-			}
-			else
+			} else
 			{
 				// Configure windowed mode settings
 				width = window_width;
@@ -478,7 +469,6 @@ namespace GamesEngineeringBase
 			// Initialize input states
 			memset(keys, 0, 256 * sizeof(bool));
 			memset(mouseButtons, 0, 3 * sizeof(bool));
-			quit = false;
 
 			// Initialize COM library for image loading
 			HRESULT comResult;
@@ -597,8 +587,6 @@ namespace GamesEngineeringBase
 		{
 			return mouseWheel;
 		}
-
-		bool isQuit() const { return quit; }
 
 		// Gets the mouse X-coordinate relative to the window, accounting for zoom
 		int getMouseInWindowX()
@@ -1004,8 +992,7 @@ namespace GamesEngineeringBase
 			{
 				// Copy pixels directly if stride matches
 				frame->CopyPixels(0, stride, width * height * channels, data);
-			}
-			else
+			} else
 			{
 				// Handle images with padded stride
 				unsigned char* strideData = new unsigned char[stride * height];
@@ -1034,7 +1021,7 @@ namespace GamesEngineeringBase
 		// Note, the bounds are handled via clamping
 		unsigned char* at(unsigned int x, unsigned int y)
 		{
-			return &data[((min(y, height - 1) * width) + min(x, width - 1)) * channels];
+			return &data[((min(y, height - 1) * width) + min(x, width  - 1)) * channels];
 		}
 
 		// Returns the alpha value of the pixel at (x, y)
@@ -1139,8 +1126,7 @@ namespace GamesEngineeringBase
 				}
 				lLen = lLen - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
 				lLen = lLen / (32767 - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
-			}
-			else
+			} else
 			{
 				lLen = 0;
 			}
@@ -1161,8 +1147,7 @@ namespace GamesEngineeringBase
 				}
 				rLen = rLen - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
 				rLen = rLen / (32767 - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
-			}
-			else
+			} else
 			{
 				rLen = 0;
 			}
@@ -1265,8 +1250,7 @@ namespace GamesEngineeringBase
 				if (XInputGetState(i, &state) == 0)
 				{
 					controllers[i].activate(i);
-				}
-				else
+				} else
 				{
 					controllers[i].deactivate();
 				}

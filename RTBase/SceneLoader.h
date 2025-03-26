@@ -5,8 +5,6 @@
 #include "GEMLoader.h"
 #include "Renderer.h"
 
-using GamesEngineeringBase::Window;
-
 class RTCamera
 {
 public:
@@ -20,176 +18,76 @@ public:
 	{
 		rotspeed = 5.0f;
 	}
-
 	void forward()
 	{
-		Vec3 dir = (to - from).normalize();
-		from = from + dir * movespeed;
+		Vec3 dir = to - from;
+		dir = dir.normalize() * movespeed;
+		from = from + dir;
 		to = from + dir;
+		updateCamera();
 	}
-
 	void back()
 	{
-		Vec3 dir = (to - from).normalize();
-		from = from - dir * movespeed;
+		Vec3 dir = to - from;
+		dir = dir.normalize() * movespeed;
+		from = from - dir;
 		to = from + dir;
+		updateCamera();
 	}
-
-	void right()
-	{
-		Vec3 dir = (to - from).normalize();
-		Vec3 r = Cross(dir, up);
-		from = from + r * movespeed;
-		to = from + dir;
-	}
-
 	void left()
 	{
-		Vec3 dir = (to - from).normalize();
-		Vec3 r = Cross(dir, up);
-		from = from - r * movespeed;
-		to = from + dir;
-	}
+		Vec3 dir = to - from;
+		dir = dir.normalize();
 
+		float rad = rotspeed * (M_PI / 180.0f);
+		float cosTheta = cosf(rad);
+		float sinTheta = sinf(rad);
+		Vec3 k = up;
+		Vec3 rotated = (dir * cosTheta) + (k.cross(dir) * sinTheta) + (k * (k.dot(dir) * (1 - cosTheta)));
+		dir.x = rotated.x;
+		dir.y = rotated.y;
+		dir.z = rotated.z;
+		to = from + dir;
+		updateCamera();
+	}
+	void right()
+	{
+		Vec3 dir = to - from;
+		dir = dir.normalize();
+		float rad = -rotspeed * (M_PI / 180.0f);
+		float cosTheta = cosf(rad);
+		float sinTheta = sinf(rad);
+		Vec3 k = up;
+		Vec3 rotated = (dir * cosTheta) + (k.cross(dir) * sinTheta) + (k * (k.dot(dir) * (1 - cosTheta)));
+		dir.x = rotated.x;
+		dir.y = rotated.y;
+		dir.z = rotated.z;
+		to = from + dir;
+		updateCamera();
+	}
 	void flyUp()
 	{
 		Vec3 dir = up * movespeed;
 		from = from + dir;
 		to = to + dir;
+		updateCamera();
 	}
-
 	void flyDown()
 	{
 		Vec3 dir = up * movespeed;
 		from = from - dir;
 		to = to - dir;
+		updateCamera();
 	}
-
-	void yaw(float angle)
-	{
-		Vec3 dir = to - from;
-		dir = dir.normalize();
-
-		float rad = angle * (M_PI / 180.0f);
-		float cosTheta = cosf(rad);
-		float sinTheta = sinf(rad);
-
-		Vec3 k = up.normalize();
-
-		Vec3 rotated = (dir * cosTheta) + (k.cross(dir) * sinTheta) + (k * (k.dot(dir) * (1 - cosTheta)));
-		dir = rotated;
-
-		to = from + dir;
-	}
-
-	void pitch(float angle)
-	{
-		Vec3 dir = to - from;
-		dir = dir.normalize();
-
-		float rad = angle * (M_PI / 180.0f);
-		float cosTheta = cosf(rad);
-		float sinTheta = sinf(rad);
-
-		Vec3 k = dir.cross(up).normalize();
-
-		Vec3 rotated = (dir * cosTheta) + (k.cross(dir) * sinTheta) + (k * (k.dot(dir) * (1 - cosTheta)));
-		dir = rotated;
-
-		to = from + dir;
-	}
-
-	void roll(float angle)
-	{
-		Vec3 dir = (to - from).normalize();
-
-		float rad = angle * (M_PI / 180.0f);
-		float cosTheta = cosf(rad);
-		float sinTheta = sinf(rad);
-
-		Vec3 k = dir;
-
-		Vec3 rotated = (up * cosTheta) + (k.cross(up) * sinTheta) + (k * (k.dot(up) * (1 - cosTheta)));
-		up = rotated.normalize();
-	}
-
 	void updateCamera()
 	{
 		Matrix V = Matrix::lookAt(from, to, up);
 		V = V.invert();
 		camera->updateView(V);
 	}
-
-	bool update(Window& canvas)
-	{
-		bool change = false;
-
-		// movement
-		if (canvas.keyPressed('W'))
-		{
-			forward();
-			change = true;
-		}
-		if (canvas.keyPressed('S'))
-		{
-			back();
-			change = true;
-		}
-		if (canvas.keyPressed('A'))
-		{
-			left();
-			change = true;
-		}
-		if (canvas.keyPressed('D'))
-		{
-			right();
-			change = true;
-		}
-		if (canvas.keyPressed('E'))
-		{
-			flyUp();
-			change = true;
-		}
-		if (canvas.keyPressed('Q'))
-		{
-			flyDown();
-			change = true;
-		}
-
-		// rotation
-		if (canvas.keyPressed(VK_LEFT))
-		{
-			if (canvas.keyPressed(VK_SHIFT))
-				roll(-rotspeed);
-			else
-				yaw(rotspeed);
-			change = true;
-		}
-		if (canvas.keyPressed(VK_RIGHT))
-		{
-			if (canvas.keyPressed(VK_SHIFT))
-				roll(rotspeed);
-			else
-				yaw(-rotspeed);
-			change = true;
-		}
-		if (canvas.keyPressed(VK_UP))
-		{
-			pitch(rotspeed);
-			change = true;
-		}
-		if (canvas.keyPressed(VK_DOWN))
-		{
-			pitch(-rotspeed);
-			change = true;
-		}
-
-		if (change)
-			updateCamera();
-
-		return change;
-	}
 };
+
+static RTCamera viewcamera;
 
 Texture* loadTexture(std::string filename, std::map<std::string, Texture*>& textureManager)
 {
@@ -239,12 +137,10 @@ void loadInstance(std::string sceneName, std::vector<Triangle>& meshTriangles, s
 	if (instance.material.find("bsdf").getValue("") == "plastic")
 	{
 		std::string filename = sceneName + "/" + instance.material.find("reflectance").getValue("");
-		Colour eta;
-		Colour k;
-		instance.material.find("eta").getValuesAsVector3(eta.r, eta.g, eta.b);
-		instance.material.find("k").getValuesAsVector3(k.r, k.g, k.b);
+		float intIOR = instance.material.find("intIOR").getValue(1.33f);
+		float extIOR = instance.material.find("extIOR").getValue(1.0f);
 		float roughness = instance.material.find("roughness").getValue(1.0f);
-		material = new ConductorBSDF(loadTexture(filename, textureManager), eta, k, roughness);
+		material = new PlasticBSDF(loadTexture(filename, textureManager), intIOR, extIOR, roughness);
 		meshMaterials.push_back(material);
 	}
 	if (instance.material.find("bsdf").getValue("") == "dielectric")
@@ -252,13 +148,11 @@ void loadInstance(std::string sceneName, std::vector<Triangle>& meshTriangles, s
 		std::string filename = sceneName + "/" + instance.material.find("reflectance").getValue("");
 		float intIOR = instance.material.find("intIOR").getValue(1.33f);
 		float extIOR = instance.material.find("extIOR").getValue(1.0f);
-		material = new GlassBSDF(loadTexture(filename, textureManager), intIOR, extIOR);
 		float roughness = instance.material.find("roughness").getValue(1.0f);
 		if (roughness < 0.001f)
 		{
 			material = new GlassBSDF(loadTexture(filename, textureManager), intIOR, extIOR);
-		}
-		else
+		} else
 		{
 			material = new DielectricBSDF(loadTexture(filename, textureManager), intIOR, extIOR, roughness);
 		}
@@ -339,7 +233,7 @@ void loadInstance(std::string sceneName, std::vector<Triangle>& meshTriangles, s
 	}
 }
 
-Scene* loadScene(std::string sceneName, RTCamera& viewcamera)
+Scene* loadScene(std::string sceneName)
 {
 	Scene* scene = new Scene();
 	GEMLoader::GEMScene gemscene;
@@ -382,8 +276,7 @@ Scene* loadScene(std::string sceneName, RTCamera& viewcamera)
 	{
 		Texture* env = loadTexture(sceneName + "/" + gemscene.findProperty("envmap").getValue(""), textureManager);
 		background = new EnvironmentMap(env);
-	}
-	else
+	} else
 	{
 		background = new BackgroundColour(Colour(0.0f, 0.0f, 0.0f));
 	}

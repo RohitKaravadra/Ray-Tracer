@@ -6,59 +6,19 @@
 #define NOMINMAX
 #include "GamesEngineeringBase.h"
 #include <unordered_map>
-#include <iomanip>
 
 void runTests()
 {
 	// Add test code here
 }
 
-std::string formatTime(int seconds) {
-	int hours = seconds / 3600;
-	int minutes = (seconds % 3600) / 60;
-	int secs = seconds % 60;
-
-	std::ostringstream formattedTime;
-	formattedTime << std::setw(2) << std::setfill('0') << hours << ":"
-		<< std::setw(2) << std::setfill('0') << minutes << ":"
-		<< std::setw(2) << std::setfill('0') << secs;
-
-	return formattedTime.str();
-}
-
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
 	// Add call to tests if required
 	// runTests()
-
-	// scene names
-	std::string scenes[] = { "cornell-box",		// 0
-							"bathroom",			// 1
-							"bathroom2",		// 2
-							"bedroom",			// 3
-							"classroom",		// 4
-							"coffee",			// 5
-							"dining-room",		// 6		
-							"glass-of-water",	// 7
-							"house",			// 8
-							"kitchen",			// 9
-							"living-room",		// 10		
-							"living-room-2",	// 11
-							"living-room-3",	// 12
-							"Sibenik",			// 13	
-							"staircase",		// 14	
-							"staircase2",		// 15		
-							"Terrain",			// 16	
-							"veach-bidir",		// 17		
-							"veach-mis",		// 18	
-							"MaterialsScene"	// 19 
-	};
-
+	
 	// Initialize default parameters
-	unsigned int sceneNum = 19;
-	DRAWMODE drawMode = DM_PATHTRACE;
-
-	std::string sceneName = "scenes/" + scenes[sceneNum];
+	std::string sceneName = "cornell-box";
 	std::string filename = "GI.hdr";
 	unsigned int SPP = 8192;
 
@@ -75,13 +35,11 @@ int main(int argc, char* argv[])
 				{
 					std::string argValue = argv[++i];
 					args[argName] = argValue;
-				}
-				else
+				} else
 				{
 					std::cerr << "Error: Missing value for argument '" << arg << "'\n";
 				}
-			}
-			else
+			} else
 			{
 				std::cerr << "Warning: Ignoring unexpected argument '" << arg << "'\n";
 			}
@@ -102,64 +60,60 @@ int main(int argc, char* argv[])
 			}
 		}
 	}
-
-	// Load scene and camera
-	RTCamera viewcamera;
-	Scene* scene = loadScene(sceneName, viewcamera);
-
-	// Create canvas
+	Scene* scene = loadScene(sceneName);
 	GamesEngineeringBase::Window canvas;
 	canvas.create((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, "Tracer", 1.0f);
-
-	// Create ray tracer
 	RayTracer rt;
-	rt.init(scene, &canvas, 10);	// 10 threads
-	rt.drawMode = drawMode;
-
-	// Create timer
-	GamesEngineeringBase::Timer timer;
-	float totalTime = 0;
-
-	std::cout << "\n\n\n\n";
+	rt.init(scene, &canvas);
 	bool running = true;
-
+	GamesEngineeringBase::Timer timer;
 	while (running)
 	{
-		canvas.checkInput(); // Check for input
-
-		// Check if the user wants to quit
-		if (canvas.isQuit() || canvas.keyPressed(VK_ESCAPE))
-		{
-			running = false;
-			continue;
-		}
-
+		canvas.checkInput();
 		canvas.clear();
-
-		// Update camera and check if it has changed (reset if it has)
-		if (viewcamera.update(canvas))
+		if (canvas.keyPressed(VK_ESCAPE))
 		{
-			rt.clear();
-			totalTime = 0;
+			break;
 		}
-
+		if (canvas.keyPressed('W'))
+		{
+			viewcamera.forward();
+			rt.clear();
+		}
+		if (canvas.keyPressed('S'))
+		{
+			viewcamera.back();
+			rt.clear();
+		}
+		if (canvas.keyPressed('A'))
+		{
+			viewcamera.left();
+			rt.clear();
+		}
+		if (canvas.keyPressed('D'))
+		{
+			viewcamera.right();
+			rt.clear();
+		}
+		if (canvas.keyPressed('E'))
+		{
+			viewcamera.flyUp();
+			rt.clear();
+		}
+		if (canvas.keyPressed('Q'))
+		{
+			viewcamera.flyDown();
+			rt.clear();
+		}
 		// Time how long a render call takes
 		timer.reset();
-		rt.renderMT();
+		rt.render();
 		float t = timer.dt();
-
-		totalTime += t; // update total time
-
-		// Write stats to console
-		std::cout << "\033[F\033[F\033[F\033[F";
-		std::cout << "Samples    : " << rt.getSPP() << std::endl;
-		std::cout << "Time       : " << t << std::endl;
-		std::cout << "FPS        : " << (t > 0 ? 1.0f / t : FLT_MAX) << std::endl;
-		std::cout << "Total time : " << formatTime(totalTime) << std::endl;
-
+		// Write
+		std::cout << t << std::endl;
 		if (canvas.keyPressed('P'))
 		{
-			rt.savePNG(filename);
+			rt.saveHDR(filename);
 		}
 		if (canvas.keyPressed('L'))
 		{
@@ -170,12 +124,9 @@ int main(int argc, char* argv[])
 		if (SPP == rt.getSPP())
 		{
 			rt.saveHDR(filename);
-			running = false;
+			break;
 		}
 		canvas.present();
 	}
-
-	delete scene;
-
 	return 0;
 }
