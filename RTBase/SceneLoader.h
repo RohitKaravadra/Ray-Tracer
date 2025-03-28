@@ -112,7 +112,6 @@ public:
 		Vec3 rotated = (up * cosTheta) + (k.cross(up) * sinTheta) + (k * (k.dot(up) * (1 - cosTheta)));
 		up = rotated.normalize();
 	}
-
 	void updateCamera()
 	{
 		Matrix V = Matrix::lookAt(from, to, up);
@@ -239,7 +238,6 @@ void loadInstance(std::string sceneName, std::vector<Triangle>& meshTriangles, s
 	if (instance.material.find("bsdf").getValue("") == "plastic")
 	{
 		std::string filename = sceneName + "/" + instance.material.find("reflectance").getValue("");
-
 		float intIOR = instance.material.find("intIOR").getValue(1.33f);
 		float extIOR = instance.material.find("extIOR").getValue(1.0f);
 		float roughness = instance.material.find("roughness").getValue(1.0f);
@@ -251,13 +249,11 @@ void loadInstance(std::string sceneName, std::vector<Triangle>& meshTriangles, s
 		std::string filename = sceneName + "/" + instance.material.find("reflectance").getValue("");
 		float intIOR = instance.material.find("intIOR").getValue(1.33f);
 		float extIOR = instance.material.find("extIOR").getValue(1.0f);
-		material = new GlassBSDF(loadTexture(filename, textureManager), intIOR, extIOR);
 		float roughness = instance.material.find("roughness").getValue(1.0f);
 		if (roughness < 0.001f)
 		{
 			material = new GlassBSDF(loadTexture(filename, textureManager), intIOR, extIOR);
-		}
-		else
+		} else
 		{
 			material = new DielectricBSDF(loadTexture(filename, textureManager), intIOR, extIOR, roughness);
 		}
@@ -381,8 +377,7 @@ Scene* loadScene(std::string sceneName, RTCamera& viewcamera)
 	{
 		Texture* env = loadTexture(sceneName + "/" + gemscene.findProperty("envmap").getValue(""), textureManager);
 		background = new EnvironmentMap(env);
-	}
-	else
+	} else
 	{
 		background = new BackgroundColour(Colour(0.0f, 0.0f, 0.0f));
 	}

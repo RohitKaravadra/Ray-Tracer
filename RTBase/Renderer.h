@@ -29,14 +29,12 @@ struct MISData
 
 class RayTracer
 {
-
 public:
 	Scene* scene;
 	GamesEngineeringBase::Window* canvas;
 	Film* film;
-	MTRandom** samplers;
-	std::thread** threads;
-
+	MTRandom *samplers;
+	std::thread **threads;
 	int numProcs;
 	unsigned int numThreads;
 
@@ -74,10 +72,8 @@ public:
 	{
 		scene = _scene;
 		canvas = _canvas;
-
 		film = new Film();
 		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
-
 		SYSTEM_INFO sysInfo;
 		GetSystemInfo(&sysInfo);
 		numProcs = sysInfo.dwNumberOfProcessors;
@@ -103,7 +99,6 @@ public:
 
 		tileCounter.store(0);
 	}
-
 	void clear()
 	{
 		film->clear();
@@ -111,6 +106,7 @@ public:
 
 	Colour computeDirect(ShadingData shadingData, Sampler* sampler, float misPdf = 0)
 	{
+		// Is surface is specular we cannot computing direct lighting
 		if (shadingData.bsdf->isPureSpecular() == true)
 		{
 			return Colour(0.0f, 0.0f, 0.0f);
@@ -252,9 +248,8 @@ public:
 			}
 			return shadingData.bsdf->evaluate(shadingData, Vec3(0, 1, 0));
 		}
-		return scene->background->evaluate(shadingData, r.dir);
+		return scene->background->evaluate(r.dir);
 	}
-
 	Colour viewNormals(Ray& r)
 	{
 		IntersectionData intersection = scene->traverse(r);
@@ -265,7 +260,6 @@ public:
 		}
 		return Colour(0.0f, 0.0f, 0.0f);
 	}
-
 	void render()
 	{
 		film->incrementSPP();
@@ -363,17 +357,14 @@ public:
 			delete threads[i];
 		}
 	}
-
 	int getSPP()
 	{
 		return film->SPP;
 	}
-
 	void saveHDR(std::string filename)
 	{
 		film->save(filename);
 	}
-
 	void savePNG(std::string filename)
 	{
 		stbi_write_png(filename.c_str(), canvas->getWidth(), canvas->getHeight(), 3, canvas->getBackBuffer(), canvas->getWidth() * 3);
