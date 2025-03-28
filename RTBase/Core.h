@@ -145,10 +145,6 @@ public:
 	{
 		return Vec3(x * v.x, y * v.y, z * v.z);
 	}
-	bool operator==(const Vec3 v)
-	{
-		return x == v.x && y == v.y && z == v.z;
-	}
 	Vec3 perspectiveDivide() const
 	{
 		return Vec3(x / w, y / w, z / w, 1.0f / w);
@@ -174,10 +170,6 @@ public:
 	Vec3 cross(Vec3 v) const
 	{
 		return Vec3((y * v.z) - (z * v.y), (z * v.x) - (x * v.z), (x * v.y) - (y * v.x));
-	}
-	void print()
-	{
-		std::cout << "[" << x << ":" << y << ":" << z << "]\n";
 	}
 };
 
@@ -526,8 +518,7 @@ public:
 		{
 			float l = 1.0f / sqrtf(w.x * w.x + w.z * w.z);
 			u = Vec3(w.z * l, 0.0f, -w.x * l);
-		}
-		else
+		} else
 		{
 			float l = 1.0f / sqrtf(w.y * w.y + w.z * w.z);
 			u = Vec3(0, w.z * l, -w.y * l);
