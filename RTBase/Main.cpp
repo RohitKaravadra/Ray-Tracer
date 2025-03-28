@@ -55,8 +55,9 @@ int main(int argc, char* argv[])
 	};
 
 	// Initialize default parameters
-	unsigned int sceneNum = 19;
+	unsigned int sceneNum = 8;
 	DRAWMODE drawMode = DM_PATHTRACE;
+	bool multiThreaded = true;
 
 	std::string sceneName = "scenes/" + scenes[sceneNum];
 	std::string filename = "GI.hdr";
@@ -105,6 +106,7 @@ int main(int argc, char* argv[])
 
 	// Load scene and camera
 	RTCamera viewcamera;
+	std::cout << "Loading scene: " << scenes[sceneNum] << std::endl;
 	Scene* scene = loadScene(sceneName, viewcamera);
 
 	// Create canvas
@@ -145,7 +147,12 @@ int main(int argc, char* argv[])
 
 		// Time how long a render call takes
 		timer.reset();
-		rt.renderMT();
+
+		if (multiThreaded)
+			rt.renderMT();
+		else
+			rt.render();
+
 		float t = timer.dt();
 
 		totalTime += t; // update total time

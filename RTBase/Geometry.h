@@ -224,10 +224,7 @@ public:
 		float tentry = std::max(std::max(entry.x, entry.y), entry.z);
 		float texit = std::min(std::min(exit.x, exit.y), exit.z);
 
-		if (tentry > texit || texit < 0)
-			return false;
-
-		return true;
+		return !(tentry > texit || texit < 0);
 	}
 
 	// Add code here

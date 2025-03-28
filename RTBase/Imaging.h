@@ -154,13 +154,14 @@ public:
 
 class GaussianFilter : public ImageFilter
 {
-	const int radii = 2;
-	const float alpha = 2.0f;
-	const float t2 = std::exp(-alpha * SQ(radii));
+	static constexpr int radii = 2;
+	static constexpr float alpha = 2.5f;
+	const float t2 = std::exp(-alpha * (radii * radii));
+
 public:
 	float Gaussian(float d) const
 	{
-		return std::exp(-alpha * SQ(d)) - t2;
+		return std::exp(-alpha * (d * d)) - t2;
 	}
 
 	float filter(float x, float y) const
@@ -176,36 +177,34 @@ public:
 
 class MitchellNetravaliFilter : public ImageFilter
 {
-	const float B = 1 / 3.0f;
-	const float C = 1 / 3.0f;
+	const float B = 1.0f / 3.0f;
+	const float C = 1.0f / 3.0f;
 
-	const float a1 = (1 / 6.0f) * (12 - 8 * B - 6 * C);
+	const float a1 = (1.0f / 6.0f) * (12 - 9 * B - 6 * C);
 	const float a2 = (-18 + 12 * B + 6 * C);
 	const float a3 = (6 - 2 * B);
 
-	const float b1 = (1 / 6.0f) * (-B - 6 * C);
+	const float b1 = (1.0f / 6.0f) * (-B - 6 * C);
 	const float b2 = (6 * B + 30 * C);
 	const float b3 = (-12 * B - 48 * C);
 	const float b4 = (8 * B + 24 * C);
+
 public:
-	float MitechellNetraval(float d) const
+	float MitchellNetravali(float d) const
 	{
 		d = fabs(d);
+		if (d >= 2) return 0;
 
-		if (d >= 2)
-			return 0;
-
-		float ds = SQ(d), dc = ds * d;
+		float ds = d * d, dc = ds * d;
 		if (d >= 0 && d < 1)
 			return a1 * dc + a2 * ds + a3;
-
-		if (d >= 1 && d < 2)
+		else
 			return b1 * dc + b2 * ds + b3 * d + b4;
 	}
 
 	float filter(float x, float y) const
 	{
-		return MitechellNetraval(x) * MitechellNetraval(y);
+		return MitchellNetravali(x) * MitchellNetravali(y);
 	}
 
 	int size() const

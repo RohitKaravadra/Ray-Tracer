@@ -35,11 +35,13 @@ class AreaLight : public Light
 public:
 	Triangle* triangle = NULL;
 	Colour emission;
+
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& emittedColour, float& pdf)
 	{
 		emittedColour = emission;
 		return triangle->sample(sampler, pdf);
 	}
+
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
 		if (Dot(wi, triangle->gNormal()) < 0)
@@ -48,26 +50,32 @@ public:
 		}
 		return Colour(0.0f, 0.0f, 0.0f);
 	}
+
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
 		return 1.0f / triangle->area;
 	}
+
 	bool isArea()
 	{
 		return true;
 	}
+
 	Vec3 normal(const ShadingData& shadingData, const Vec3& wi)
 	{
 		return triangle->gNormal();
 	}
+
 	float totalIntegratedPower()
 	{
 		return (triangle->area * emission.Lum());
 	}
+
 	Vec3 samplePositionFromLight(Sampler* sampler, float& pdf)
 	{
 		return triangle->sample(sampler, pdf);
 	}
+
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf)
 	{
 		// Add code to sample a direction from the light
@@ -129,6 +137,7 @@ public:
 		return wi;
 	}
 };
+
 
 class TabulatedDistribution
 {
@@ -237,8 +246,8 @@ public:
 
 	float getPdf(float u, float v)
 	{
-		int row = binarySearch(cdfRows, height, v);
-		int col = binarySearch(cdfCols[row], width, u);
+		int row = v * height;
+		int col = u * width;
 		return getPdf(row, col);
 	}
 
@@ -268,6 +277,13 @@ public:
 		wi.z = sinf(theta) * sinf(phi);
 
 		return wi;
+	}
+
+	float getLum(float u, float v)
+	{
+		int row = v * height;
+		int col = u * width;
+		return luminance[row * width + col];
 	}
 };
 
@@ -316,7 +332,6 @@ public:
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
-		// Assignment: Update this code to return the correct PDF of luminance weighted importance sampling
 		float u = atan2f(wi.z, wi.x);
 		u = (u < 0.0f) ? u + (2.0f * M_PI) : u;
 		u = u / (2.0f * M_PI);

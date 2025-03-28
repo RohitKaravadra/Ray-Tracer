@@ -11,7 +11,7 @@
 #include <thread>
 #include <functional>
 
-#define MAX_DEPTH 5
+#define MAX_DEPTH 10
 
 enum DRAWMODE
 {
@@ -21,7 +21,7 @@ enum DRAWMODE
 	DM_PATHTRACE = 3
 };
 
-struct LastData
+struct MISData
 {
 	Colour bsdf;
 	float pdf;
@@ -66,6 +66,7 @@ public:
 		// clean film
 		if (film != nullptr)
 			delete film;
+
 	}
 
 	void init(Scene* _scene, GamesEngineeringBase::Window* _canvas, unsigned int _numThreads = 3)
@@ -95,12 +96,11 @@ public:
 		for (unsigned int i = 0; i < numThreads; i++)
 			samplers[i] = new MTRandom((48271 * (i + 1)) % m);
 
-		totalXTiles = canvas->getWidth() / tileSize;
-		totalTiles = totalXTiles * canvas->getHeight() / tileSize;
+		totalXTiles = (canvas->getWidth() + tileSize - 1) / tileSize;
+		float totalYTiles = (canvas->getHeight() + tileSize - 1) / tileSize;
+		totalTiles = totalXTiles * totalYTiles;
 
 		tileCounter.store(0);
-
-		clear();
 	}
 
 	void clear()
@@ -108,7 +108,7 @@ public:
 		film->clear();
 	}
 
-	Colour computeDirect(ShadingData shadingData, Sampler* sampler)
+	Colour computeDirect(ShadingData shadingData, Sampler* sampler, float misPdf = 0)
 	{
 		if (shadingData.bsdf->isPureSpecular() == true)
 		{
@@ -153,8 +153,8 @@ public:
 				// Trace
 				if (scene->visible(shadingData.x, shadingData.x + (p * 10000.0f)))
 				{
-					// Shade
-					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm / (pmf * pdf);
+					float weight = pdf / (pdf + misPdf);
+					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm * weight / (pmf * pdf);
 				}
 			}
 		}
@@ -177,10 +177,13 @@ public:
 		return scene->background->evaluate(shadingData, r.dir);
 	}
 
-	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, LastData& lastData, bool canHitLight = true)
+	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, float misPdf = 0, bool canHitLight = true)
 	{
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
+
+		//float t = scene->background->PDF(shadingData, r.dir);
+		//return Colour(t, t, t);
 
 		if (shadingData.t < FLT_MAX)
 		{
@@ -190,10 +193,10 @@ public:
 					: Colour(0.0f, 0.0f, 0.0f);
 			}
 
-			// calculate direct lighting
-			Colour direct = pathThroughput * computeDirect(shadingData, sampler);
 
-			if (depth > MAX_DEPTH) return direct;
+			// max depth reached
+			if (depth > MAX_DEPTH)
+				return pathThroughput * computeDirect(shadingData, sampler);
 
 			// russian roulette
 			float russianRouletteProbability = min(pathThroughput.Lum(), 0.9f);
@@ -201,7 +204,7 @@ public:
 			if (sampler->next() < russianRouletteProbability)
 				pathThroughput = pathThroughput / russianRouletteProbability;
 			else
-				return direct;
+				return pathThroughput * computeDirect(shadingData, sampler);
 
 			// sample new direction
 			Colour bsdf;
@@ -213,24 +216,16 @@ public:
 			// create new ray
 			r.init(shadingData.x + (wi * EPSILON), wi);
 
-			// store last data
-			lastData.bsdf = bsdf;
-			lastData.pdf = pdf;
+			// calculate direct lighting with MIS
+			Colour direct = pathThroughput * computeDirect(shadingData, sampler, pdf);
 
 			// trace new ray
-			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, lastData, shadingData.bsdf->isPureSpecular());
+			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, pdf, shadingData.bsdf->isPureSpecular());
 		}
 
-		Colour bkColour = scene->background->evaluate(shadingData, r.dir);
-		if (depth <= 0)
-			return bkColour;
-
-		float bkPdf = scene->background->PDF(shadingData, r.dir);
-
-		float total = lastData.pdf + bkPdf;
-		float w1 = bkPdf / total;
-		float w2 = lastData.pdf / total;
-		return (bkColour * w1 + lastData.bsdf * w2) * pathThroughput;
+		float pdf = scene->background->PDF(shadingData, r.dir);
+		float weight = pdf / (pdf + misPdf);
+		return scene->background->evaluate(shadingData, r.dir) * pathThroughput * weight / pdf;
 	}
 
 	Colour pathTrace(unsigned int x, unsigned int y, Sampler* sampler)
@@ -238,8 +233,7 @@ public:
 		Ray ray = scene->camera.generateRay(x + sampler->next(), y + sampler->next());
 
 		Colour pathThroughput(1.0f, 1.0f, 1.0f);
-		LastData lastData;
-		return pathTrace(ray, pathThroughput, 0, sampler, lastData);
+		return pathTrace(ray, pathThroughput, 0, sampler);
 	}
 
 	Colour albedo(Ray& r)
@@ -279,10 +273,22 @@ public:
 				float py = y + 0.5f;
 				Ray ray = scene->camera.generateRay(px, py);
 
-				//Colour col = viewNormals(ray);
-				//Colour col = albedo(ray);
-				Colour col = direct(ray, samplers[0]);
-				//Colour col = pathTrace(x, y, samplers[0]);
+				Colour col;
+				switch (drawMode)
+				{
+				case DM_NORMALS:
+					col = viewNormals(ray);
+					break;
+				case DM_ALBEDO:
+					col = albedo(ray);
+					break;
+				case DM_DIRECT:
+					col = direct(ray, samplers[0]);
+					break;
+				case DM_PATHTRACE:
+					col = pathTrace(x, y, samplers[0]);
+					break;
+				}
 
 				film->splat(px, py, col);
 				unsigned char r, g, b;

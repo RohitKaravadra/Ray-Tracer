@@ -35,28 +35,18 @@ class ShadingHelper
 public:
 	static float fresnelDielectric(float cosTheta, float iorInt, float iorExt)
 	{
-		// Determine if the ray is entering or exiting
-		bool entering = cosTheta > 0.0f;
-		float etaI = entering ? iorInt : iorExt;
-		float etaT = entering ? iorExt : iorInt;
-
-		// Compute relative IOR
-		float eta = etaI / etaT;
-
-		// Snell's Law
+		// calculate fresnel term
+		float eta = (cosTheta > 0.0f) ? iorExt / iorInt : iorInt / iorExt;
 		float sin2ThetaT = eta * eta * (1.0f - cosTheta * cosTheta);
 
-		// Handle total internal reflection
-		if (sin2ThetaT >= 1.0f) {
-			return 1.0f;
-		}
+		if (sin2ThetaT > 1.0f) return 1.0f; // Total internal reflection
 
-		float cosThetaT = std::sqrtf(1.0f - sin2ThetaT);	// cos of transmitted angle
+		float cosThetaT = std::sqrt(1.0f - sin2ThetaT);
 
-		float rs = (cosTheta - eta * cosThetaT) / (cosTheta + eta * cosThetaT);	// parallel
-		float rp = (eta * cosTheta - cosThetaT) / (eta * cosTheta + cosThetaT); // perpendicular
+		float rParallel = (iorExt * cosTheta - iorInt * cosThetaT) / (iorExt * cosTheta + iorInt * cosThetaT);
+		float rPerpendicular = (iorInt * cosTheta - iorExt * cosThetaT) / (iorInt * cosTheta + iorExt * cosThetaT);
 
-		return 0.5f * (rs * rs + rp * rp);
+		return 0.5f * (rParallel * rParallel + rPerpendicular * rPerpendicular);
 	}
 	static Colour fresnelConductor(float cosTheta, Colour ior, Colour k)
 	{
@@ -258,24 +248,29 @@ public:
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 
+		float eta = (localWo.z > 0.0f) ? intIOR / extIOR : extIOR / intIOR;
+		float cosThetaI = std::abs(localWo.z);
+		float sin2ThetaT = eta * eta * (1.0f - SQ(cosThetaI));
+
 		float F = ShadingHelper::fresnelDielectric(localWo.z, intIOR, extIOR);
 
-		bool reflect = sampler->next() < F;
-		pdf = 1.0f;
-
-		if (reflect)
+		Vec3 wi;
+		if (sampler->next() < F || sin2ThetaT >= 1.0f) // Total internal reflection fallback
 		{
-			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * F;
-			Vec3 wr(-localWo.x, -localWo.y, localWo.z);
-			return shadingData.frame.toWorld(wr);
+			// Reflect
+			wi = Vec3(-localWo.x, -localWo.y, localWo.z);
+			pdf = F;
+			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * pdf / wi.z;
 		}
 		else
 		{
-			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * (1.0f - F);
-			float eta = localWo.z > 0.0f ? intIOR / extIOR : extIOR / intIOR;
-			Vec3 wt(-localWo.x * eta, -localWo.y * eta, -localWo.z);
-			return shadingData.frame.toWorld(wt);
+			// Refract
+			float cosThetaT = std::sqrt(1.0f - sin2ThetaT);
+			wi = Vec3(-eta * localWo.x, -eta * localWo.y, -cosThetaT);
+			pdf = 1.0f - F;
+			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * pdf * SQ(eta) / std::abs(wi.z);
 		}
+		return shadingData.frame.toWorld(wi);
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
