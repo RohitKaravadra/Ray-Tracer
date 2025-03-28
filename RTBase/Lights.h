@@ -145,6 +145,8 @@ public:
 	std::vector<float> cdfRows;
 	std::vector<std::vector<float>> cdfCols;
 
+	float totalLum;
+
 	void clear()
 	{
 		luminance.clear();
@@ -166,7 +168,7 @@ public:
 		cdfCols.resize(height, std::vector<float>(width));
 
 		// Compute luminance and row sums
-		float totalLum = 0.0f;
+		totalLum = 0.0f;
 		float invhPI = 1.0f / ((float)height * M_PI);
 
 		for (int i = 0; i < height; i++)
@@ -294,15 +296,27 @@ class EnvironmentMap : public Light
 {
 public:
 	Texture* env;
+	TabulatedDistribution tabDist;
+
 	EnvironmentMap(Texture* _env)
 	{
 		env = _env;
+		tabDist.init(env);
 	}
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+
+	Vec3 sampleSpherical(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
 	{
 		// Assignment: Update this code to importance sampling lighting based on luminance of each pixel
 		Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
 		pdf = SamplingDistributions::uniformSpherePDF(wi);
+		reflectedColour = evaluate(wi);
+		return wi;
+	}
+
+	Vec3 sampleTabulated(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	{
+		float u, v;
+		Vec3 wi = tabDist.sample(sampler, u, v, pdf);
 		reflectedColour = evaluate(wi);
 		return wi;
 	}
@@ -313,7 +327,7 @@ public:
 		//return sampleTabulated(shadingData, sampler, reflectedColour, pdf);
 	}
 
-	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
+	Colour evaluate(const Vec3& wi)
 	{
 		float u = atan2f(wi.z, wi.x);
 		u = (u < 0.0f) ? u + (2.0f * M_PI) : u;
@@ -321,6 +335,7 @@ public:
 		float v = acosf(wi.y) / M_PI;
 		return env->sample(u, v);
 	}
+
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
 		return SamplingDistributions::uniformHemispherePDF(wi);
@@ -330,16 +345,21 @@ public:
 		float v = acosf(wi.y) / M_PI;
 		return tabDist.getPdf(u, v);
 	}
+
 	bool isArea()
 	{
 		return false;
 	}
+
 	Vec3 normal(const ShadingData& shadingData, const Vec3& wi)
 	{
 		return -wi;
 	}
+
 	float totalIntegratedPower()
 	{
+		return tabDist.totalLum;
+
 		float total = 0;
 		for (int i = 0; i < env->height; i++)
 		{
@@ -352,6 +372,7 @@ public:
 		total = total / (float)(env->width * env->height);
 		return total * 4.0f * M_PI;
 	}
+
 	Vec3 samplePositionFromLight(Sampler* sampler, float& pdf)
 	{
 		// Samples a point on the bounding sphere of the scene. Feel free to improve this.
@@ -361,15 +382,17 @@ public:
 		pdf = 1.0f / (4 * M_PI * SQ(use<SceneBounds>().sceneRadius));
 		return p;
 	}
+
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf)
 	{
-		//float u, v;
-		//Vec3 wi = tabDist.sample(sampler, u, v, pdf);
-		//return wi;
-
-		// Replace this tabulated sampling of environment maps
-		Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
-		pdf = SamplingDistributions::uniformSpherePDF(wi);
+		// sample fromtabulated distribution
+		float u, v;
+		Vec3 wi = tabDist.sample(sampler, u, v, pdf);
 		return wi;
+
+		// sample from uniform sphere
+		//Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
+		//pdf = SamplingDistributions::uniformSpherePDF(wi);
+		//return wi;
 	}
 };

@@ -33,8 +33,8 @@ public:
 	Scene* scene;
 	GamesEngineeringBase::Window* canvas;
 	Film* film;
-	MTRandom *samplers;
-	std::thread **threads;
+	MTRandom** samplers;
+	std::thread** threads;
 	int numProcs;
 	unsigned int numThreads;
 
@@ -208,11 +208,11 @@ public:
 		}
 
 		if (depth <= 0)
-			return scene->background->evaluate(shadingData, r.dir) * pathThroughput;
+			return scene->background->evaluate(r.dir) * pathThroughput;
 
 		float pdf = scene->background->PDF(shadingData, r.dir);
 		float weight = pdf / (pdf + misPdf);
-		return scene->background->evaluate(shadingData, r.dir) * pathThroughput * weight / pdf;
+		return scene->background->evaluate(r.dir) * pathThroughput * weight / pdf;
 	}
 
 	Colour pathTrace(Ray& r, Sampler* sampler)
@@ -233,7 +233,7 @@ public:
 			}
 			return computeDirect(shadingData, sampler);
 		}
-		return scene->background->evaluate(shadingData, r.dir);
+		return scene->background->evaluate(r.dir);
 	}
 
 	Colour albedo(Ray& r)
