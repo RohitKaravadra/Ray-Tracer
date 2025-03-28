@@ -55,9 +55,10 @@ int main(int argc, char* argv[])
 	};
 
 	// Initialize default parameters
-	unsigned int sceneNum = 8;
+	unsigned int sceneNum = 19;
 	DRAWMODE drawMode = DM_PATHTRACE;
 	bool multiThreaded = true;
+	TONEMAP toneMap = TM_LINEAR;
 
 	std::string sceneName = "scenes/" + scenes[sceneNum];
 	std::string filename = "GI.hdr";
@@ -105,9 +106,8 @@ int main(int argc, char* argv[])
 	}
 
 	// Load scene and camera
-	RTCamera viewcamera;
 	std::cout << "Loading scene: " << scenes[sceneNum] << std::endl;
-	Scene* scene = loadScene(sceneName, viewcamera);
+	Scene* scene = loadScene(sceneName);
 
 	// Create canvas
 	GamesEngineeringBase::Window canvas;
@@ -116,7 +116,9 @@ int main(int argc, char* argv[])
 	// Create ray tracer
 	RayTracer rt;
 	rt.init(scene, &canvas, 10);	// 10 threads
+
 	rt.drawMode = drawMode;
+	rt.toneMap = toneMap;
 
 	// Create timer
 	GamesEngineeringBase::Timer timer;

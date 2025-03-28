@@ -63,10 +63,11 @@ public:
 
 	static Vec3 uniformSampleSphere(float r1, float r2)
 	{
-		float theta = acosf(1 - 2 * r1);
+		r1 = 1 - 2 * r1;
+		float theta = acosf(r1);
 		float phy = M_PI * 2 * r2;
 		float st = sinf(theta);
-		return Vec3(st * cosf(phy), st * sinf(phy), 1 - 2 * r1);
+		return Vec3(st * cosf(phy), st * sinf(phy), r1);
 	}
 
 	static float uniformSpherePDF(const Vec3& wi)

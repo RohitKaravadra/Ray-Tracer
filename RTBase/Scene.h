@@ -49,8 +49,8 @@ public:
 	Ray generateRay(float x, float y)
 	{
 		// screen to clip space
-		x = (2 * x) / (width - 1) - 1;
-		y = 1 - (2 * y) / (height - 1);
+		x = (2.0f * x) / (width - 1.0f) - 1.0f;
+		y = 1.0f - (2.0f * y) / (height - 1.0f);
 
 		// homogeneous coordinates
 		Vec3 point(x, y, 0, 1);
@@ -148,6 +148,7 @@ public:
 		unsigned int i = sampler->next() * (lights.size() - 1);
 		return lights[i];
 	}
+
 	// Do not modify any code below this line
 	void init(std::vector<Triangle> meshTriangles, std::vector<BSDF*> meshMaterials, Light* _background)
 	{

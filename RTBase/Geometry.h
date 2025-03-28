@@ -69,7 +69,7 @@ public:
 	Vec3 maxP;
 	Vec3 minP;
 
-	const float epsilon = 1e-7f;
+	const float epsilon = 1e-8f;
 
 	void init(Vertex v0, Vertex v1, Vertex v2, unsigned int _materialIndex)
 	{

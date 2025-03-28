@@ -11,7 +11,7 @@
 #include <thread>
 #include <functional>
 
-#define MAX_DEPTH 10
+#define MAX_DEPTH 5
 
 enum DRAWMODE
 {
@@ -46,6 +46,7 @@ public:
 	std::atomic<unsigned int> tileCounter;
 
 	DRAWMODE drawMode = DM_ALBEDO;
+	TONEMAP toneMap = TM_LINEAR;
 
 	~RayTracer()
 	{
@@ -131,7 +132,8 @@ public:
 			float l = wi.lengthSq();
 			wi = wi.normalize();
 
-			float gTerm = (max(Dot(wi, shadingData.sNormal) * -Dot(wi, light->normal(shadingData, wi)), 0.0f)) / l;
+			float gTerm = (max(Dot(wi, shadingData.sNormal), 0.0f) *
+				max(-Dot(wi, light->normal(shadingData, wi)), 0.0f)) / l;
 
 			if (gTerm > 0)
 			{
@@ -139,6 +141,7 @@ public:
 				if (scene->visible(shadingData.x, p))
 				{
 					// Shade
+					float weight = pdf / (pdf + misPdf);
 					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm / (pmf * pdf);
 				}
 			}
@@ -154,27 +157,12 @@ public:
 				if (scene->visible(shadingData.x, shadingData.x + (p * 10000.0f)))
 				{
 					float weight = pdf / (pdf + misPdf);
-					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm * weight / (pmf * pdf);
+					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm / (pmf * pdf);
 				}
 			}
 		}
 
 		return Colour(0.0f, 0.0f, 0.0f);
-	}
-
-	Colour direct(Ray& r, Sampler* sampler)
-	{
-		IntersectionData intersection = scene->traverse(r);
-		ShadingData shadingData = scene->calculateShadingData(intersection, r);
-		if (shadingData.t < FLT_MAX)
-		{
-			if (shadingData.bsdf->isLight())
-			{
-				return shadingData.bsdf->emit(shadingData, shadingData.wo);
-			}
-			return computeDirect(shadingData, sampler);
-		}
-		return scene->background->evaluate(shadingData, r.dir);
 	}
 
 	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, float misPdf = 0, bool canHitLight = true)
@@ -223,17 +211,33 @@ public:
 			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, pdf, shadingData.bsdf->isPureSpecular());
 		}
 
+		//if (depth <= 0)
+		return scene->background->evaluate(shadingData, r.dir) * pathThroughput;
+
 		float pdf = scene->background->PDF(shadingData, r.dir);
 		float weight = pdf / (pdf + misPdf);
 		return scene->background->evaluate(shadingData, r.dir) * pathThroughput * weight / pdf;
 	}
 
-	Colour pathTrace(unsigned int x, unsigned int y, Sampler* sampler)
+	Colour pathTrace(Ray& r, Sampler* sampler)
 	{
-		Ray ray = scene->camera.generateRay(x + sampler->next(), y + sampler->next());
-
 		Colour pathThroughput(1.0f, 1.0f, 1.0f);
-		return pathTrace(ray, pathThroughput, 0, sampler);
+		return pathTrace(r, pathThroughput, 0, sampler);
+	}
+
+	Colour direct(Ray& r, Sampler* sampler)
+	{
+		IntersectionData intersection = scene->traverse(r);
+		ShadingData shadingData = scene->calculateShadingData(intersection, r);
+		if (shadingData.t < FLT_MAX)
+		{
+			if (shadingData.bsdf->isLight())
+			{
+				return shadingData.bsdf->emit(shadingData, shadingData.wo);
+			}
+			return computeDirect(shadingData, sampler);
+		}
+		return scene->background->evaluate(shadingData, r.dir);
 	}
 
 	Colour albedo(Ray& r)
@@ -269,8 +273,8 @@ public:
 		{
 			for (unsigned int x = 0; x < film->width; x++)
 			{
-				float px = x + 0.5f;
-				float py = y + 0.5f;
+				float px = x + (drawMode == DM_PATHTRACE ? samplers[0]->next() : 0.5f);
+				float py = y + (drawMode == DM_PATHTRACE ? samplers[0]->next() : 0.5f);
 				Ray ray = scene->camera.generateRay(px, py);
 
 				Colour col;
@@ -286,13 +290,13 @@ public:
 					col = direct(ray, samplers[0]);
 					break;
 				case DM_PATHTRACE:
-					col = pathTrace(x, y, samplers[0]);
+					col = pathTrace(ray, samplers[0]);
 					break;
 				}
 
 				film->splat(px, py, col);
 				unsigned char r, g, b;
-				film->tonemap(x, y, r, g, b);
+				film->tonemap(x, y, r, g, b, toneMap);
 
 				canvas->draw(x, y, r, g, b);
 			}
@@ -314,8 +318,8 @@ public:
 			{
 				for (unsigned int x = startx; x < endx; x++)
 				{
-					float px = x + 0.5f;
-					float py = y + 0.5f;
+					float px = x + (drawMode == DM_PATHTRACE ? samplers[id]->next() : 0.5f);
+					float py = y + (drawMode == DM_PATHTRACE ? samplers[id]->next() : 0.5f);
 					Ray ray = scene->camera.generateRay(px, py);
 
 					Colour col;
@@ -331,13 +335,13 @@ public:
 						col = direct(ray, samplers[id]);
 						break;
 					case DM_PATHTRACE:
-						col = pathTrace(x, y, samplers[id]);
+						col = pathTrace(ray, samplers[id]);
 						break;
 					}
 
 					film->splat(px, py, col);
 					unsigned char r, g, b;
-					film->tonemap(x, y, r, g, b);
+					film->tonemap(x, y, r, g, b, toneMap);
 
 					canvas->draw(x, y, r, g, b);
 				}

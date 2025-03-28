@@ -140,7 +140,7 @@ class BoxFilter : public ImageFilter
 public:
 	float filter(float x, float y) const
 	{
-		if (fabsf(x) <= 0.5f && fabsf(y) <= 0.5f)
+		if (fabsf(x) <= 1.0f && fabsf(y) <= 1.0f)
 		{
 			return 1.0f;
 		}
@@ -213,6 +213,14 @@ public:
 	}
 };
 
+enum TONEMAP
+{
+	TM_LINEAR,
+	TM_LINEAR_EXPOSURE,
+	TM_REINHARD_GLOBAL,
+	TM_FILMIC
+};
+
 class Film
 {
 public:
@@ -221,6 +229,13 @@ public:
 	unsigned int height;
 	int SPP;
 	ImageFilter* filter;
+
+	// for Filmic tonemap
+	const float A = 0.15f, B = 0.5f, C = 0.1f, D = 0.2f, E = 0.02f, F = 0.3f, W = 11.2f;
+	const float CB = C * B, DE = D * E, DF = D * F, EbF = E / F;
+	const float invCW = 1.0f / ((W * (A * W + CB) + DE) / (W * (A * W + B) + DF) - EbF);
+
+	const float inv2p2 = 1.0f / 2.2f;
 
 	~Film()
 	{
@@ -241,7 +256,8 @@ public:
 				int py = (int)y + i;
 				if (px >= 0 && px < width && py >= 0 && py < height) {
 					indices[used] = (py * width) + px;
-					filterWeights[used] = filter->filter(px - x, py - y); total += filterWeights[used];
+					filterWeights[used] = filter->filter(px - x, py - y);
+					total += filterWeights[used];
 					used++;
 				}
 			}
@@ -251,12 +267,62 @@ public:
 		}
 	}
 
-	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, float exposure = 1.0f)
+	void liner(float& r, float& g, float& b)
 	{
-		Colour pixel = film[(y * width) + x] * exposure / (float)SPP;
-		r = std::min(powf(std::max(pixel.r, 0.0f), 1.0f / 2.2f) * 255, 255.0f);
-		g = std::min(powf(std::max(pixel.g, 0.0f), 1.0f / 2.2f) * 255, 255.0f);
-		b = std::min(powf(std::max(pixel.b, 0.0f), 1.0f / 2.2f) * 255, 255.0f);
+		r = powf(std::max(r, 0.0f), inv2p2) * 255;
+		g = powf(std::max(g, 0.0f), inv2p2) * 255;
+		b = powf(std::max(b, 0.0f), inv2p2) * 255;
+	}
+
+	void linerWithExposure(float& r, float& g, float& b, float exposure = 1.0f)
+	{
+		const float e = std::pow(2.0f, exposure * inv2p2);
+		r = powf(std::max(r, 0.0f), inv2p2) * e * 255;
+		g = powf(std::max(g, 0.0f), inv2p2) * e * 255;
+		b = powf(std::max(b, 0.0f), inv2p2) * e * 255;
+	}
+
+	void ReinhardGlobal(float& r, float& g, float& b)
+	{
+		r = powf(std::max(r / (1.0f + r), 0.0f), inv2p2) * 255;
+		g = powf(std::max(g / (1.0f + g), 0.0f), inv2p2) * 255;
+		b = powf(std::max(b / (1.0f + b), 0.0f), inv2p2) * 255;
+	}
+
+	float CX(float x) const
+	{
+		return std::fabs((x * (A * x + CB) + DE) / (x * (A * x + B) + DF) - EbF);
+	}
+
+	void filmic(float& r, float& g, float& b)
+	{
+		r = CX(r) * invCW * 255.0f;
+		g = CX(g) * invCW * 255.0f;
+		b = CX(b) * invCW * 255.0f;
+	}
+
+	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, TONEMAP toneMap = TM_LINEAR)
+	{
+		Colour pixel = film[(y * width) + x] / (float)SPP;
+
+		float fr = std::max(pixel.r, 0.0f);
+		float fg = std::max(pixel.g, 0.0f);
+		float fb = std::max(pixel.b, 0.0f);
+
+		switch (toneMap)
+		{
+		case TM_LINEAR:liner(fr, fg, fb);
+			break;
+		case TM_LINEAR_EXPOSURE:linerWithExposure(fr, fg, fb);
+			break;
+		case TM_REINHARD_GLOBAL:ReinhardGlobal(fr, fg, fb);
+			break;
+		case TM_FILMIC:filmic(fr, fg, fb);
+		}
+
+		r = std::min(fr, 255.f);
+		g = std::min(fg, 255.f);
+		b = std::min(fb, 255.f);
 	}
 
 	// Do not change any code below this line

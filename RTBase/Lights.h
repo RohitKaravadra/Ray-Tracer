@@ -175,7 +175,7 @@ public:
 
 		for (int i = 0; i < height; i++)
 		{
-			float st = sinf(((float)i + 0.5f) / (float)height * M_PI);  // calculate Sin-weighting
+			float st = sinf(M_PI * ((float)i + 0.5f) / (float)height);  // calculate Sin-weighting
 			float rowSum = 0.0f;
 
 			for (int n = 0; n < width; n++)
@@ -217,13 +217,18 @@ public:
 		std::cout << "TabulatedDistribution created..." << std::endl;
 	}
 
-	static int binarySearch(const std::vector<float>& cdf, int size, float value)
-	{
-		int left = 0, right = size - 1;
+	static int binarySearch(const std::vector<float>& cdf, float value) {
+
+		const int n = static_cast<int>(cdf.size());
+
+		if (value <= cdf[0]) return 0;
+		if (value >= cdf[n - 1]) return n - 1;
+
+		int left = 0, right = static_cast<int>(cdf.size()) - 1;
 
 		while (left < right)
 		{
-			int mid = (left + right) / 2;
+			int mid = left + (right - left) / 2;
 
 			if (cdf[mid] < value)
 				left = mid + 1;
@@ -231,7 +236,7 @@ public:
 				right = mid;
 		}
 
-		return left < size ? left : size - 1;
+		return left;
 	}
 
 	float getPdf(int row, int col)
@@ -248,13 +253,14 @@ public:
 	{
 		int row = v * height;
 		int col = u * width;
+
 		return getPdf(row, col);
 	}
 
 	Vec3 sample(Sampler* sampler, float& u, float& v, float& pdf)
 	{
-		int row = binarySearch(cdfRows, height, sampler->next());		// calculate row
-		int col = binarySearch(cdfCols[row], width, sampler->next());	// calculate column
+		int row = binarySearch(cdfRows, sampler->next());		// calculate row
+		int col = binarySearch(cdfCols[row], sampler->next());	// calculate column
 
 		// calculate uv
 		v = (row + 0.5f) / height;
@@ -268,7 +274,8 @@ public:
 		float theta = v * M_PI;        // Latitude (θ) ∈ [0, π]
 
 		// Normalize the PDF
-		pdf *= sinf(theta); // Adjust for Jacobian of spherical sampling
+		//pdf *= sinf(theta);
+		pdf /= 2 * SQ(M_PI) * sinf(theta); // Adjust for Jacobian of spherical sampling
 
 		// Convert (θ, φ) to Cartesian direction
 		Vec3 wi;
@@ -317,8 +324,8 @@ public:
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
 	{
-		//return sampleSpherical(shadingData, sampler, reflectedColour, pdf);
-		return sampleTabulated(shadingData, sampler, reflectedColour, pdf);
+		return sampleSpherical(shadingData, sampler, reflectedColour, pdf);
+		//return sampleTabulated(shadingData, sampler, reflectedColour, pdf);
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
@@ -332,6 +339,7 @@ public:
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
+		return SamplingDistributions::uniformHemispherePDF(wi);
 		float u = atan2f(wi.z, wi.x);
 		u = (u < 0.0f) ? u + (2.0f * M_PI) : u;
 		u = u / (2.0f * M_PI);
@@ -374,12 +382,12 @@ public:
 	}
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf)
 	{
-		float u, v;
-		Vec3 wi = tabDist.sample(sampler, u, v, pdf);
-		return wi;
+		//float u, v;
+		//Vec3 wi = tabDist.sample(sampler, u, v, pdf);
+		//return wi;
 
 		// Replace this tabulated sampling of environment maps
-		//Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
+		Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
 		pdf = SamplingDistributions::uniformSpherePDF(wi);
 		return wi;
 	}
