@@ -142,7 +142,7 @@ public:
 				{
 					// Shade
 					float weight = pdf / (pdf + misPdf);
-					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm / (pmf * pdf);
+					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm * weight / (pmf * pdf);
 				}
 			}
 		}
@@ -157,7 +157,7 @@ public:
 				if (scene->visible(shadingData.x, shadingData.x + (p * 10000.0f)))
 				{
 					float weight = pdf / (pdf + misPdf);
-					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm / (pmf * pdf);
+					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm * weight / (pmf * pdf);
 				}
 			}
 		}
@@ -211,8 +211,8 @@ public:
 			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, pdf, shadingData.bsdf->isPureSpecular());
 		}
 
-		//if (depth <= 0)
-		return scene->background->evaluate(shadingData, r.dir) * pathThroughput;
+		if (depth <= 0)
+			return scene->background->evaluate(shadingData, r.dir) * pathThroughput;
 
 		float pdf = scene->background->PDF(shadingData, r.dir);
 		float weight = pdf / (pdf + misPdf);

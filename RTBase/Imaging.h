@@ -215,6 +215,7 @@ public:
 
 enum TONEMAP
 {
+	TM_NONE,
 	TM_LINEAR,
 	TM_LINEAR_EXPOSURE,
 	TM_REINHARD_GLOBAL,
@@ -267,6 +268,13 @@ public:
 		}
 	}
 
+	void none(float& r, float& g, float& b)
+	{
+		r *= 255;
+		g *= 255;
+		b *= 255;
+	}
+
 	void liner(float& r, float& g, float& b)
 	{
 		r = powf(std::max(r, 0.0f), inv2p2) * 255;
@@ -311,6 +319,8 @@ public:
 
 		switch (toneMap)
 		{
+		case TM_NONE:none(fr, fg, fb);
+			break;
 		case TM_LINEAR:liner(fr, fg, fb);
 			break;
 		case TM_LINEAR_EXPOSURE:linerWithExposure(fr, fg, fb);

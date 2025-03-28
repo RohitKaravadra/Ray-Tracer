@@ -48,18 +48,16 @@ public:
 	/// <returns> A ray from camera origin with direction to the point on near plane </returns>
 	Ray generateRay(float x, float y)
 	{
-		// screen to clip space
-		x = (2.0f * x) / (width - 1.0f) - 1.0f;
-		y = 1.0f - (2.0f * y) / (height - 1.0f);
-
-		// homogeneous coordinates
-		Vec3 point(x, y, 0, 1);
-
-		point = inverseProjectionMatrix.mulPointAndPerspectiveDivide(point);	// clip to camera space
-		point = camera.mulPointAndPerspectiveDivide(point);						// camera to world space
-
-		return Ray(origin, (point - origin).normalize());						// create and return ray
+		float xprime = x / width;
+		float yprime = 1.0f - (y / height);
+		xprime = (xprime * 2.0f) - 1.0f;
+		yprime = (yprime * 2.0f) - 1.0f;
+		Vec3 dir(xprime, yprime, 1.0f);
+		dir = inverseProjectionMatrix.mulPoint(dir);
+		dir = camera.mulVec(dir);
+		return Ray(origin, dir.normalize());
 	}
+
 	bool projectOntoCamera(const Vec3& p, float& x, float& y)
 	{
 		Vec3 pview = cameraToView.mulPoint(p);
