@@ -55,10 +55,10 @@ int main(int argc, char* argv[])
 	};
 
 	// Initialize default parameters
-	unsigned int sceneNum = 0;
-	DRAWMODE drawMode = DM_PATHTRACE;
+	unsigned int sceneNum = 1;
+	DRAWMODE drawMode = DM_PATH_TRACE;
 	bool multiThreaded = true;
-	TONEMAP toneMap = TM_NONE;
+	TONEMAP toneMap = TM_LINEAR;
 
 	std::string sceneName = "scenes/" + scenes[sceneNum];
 	std::string filename = "GI.hdr";
@@ -120,6 +120,7 @@ int main(int argc, char* argv[])
 
 	rt.drawMode = drawMode;
 	rt.toneMap = toneMap;
+	rt.totalSamples = SPP;
 
 	// Create timer
 	GamesEngineeringBase::Timer timer;

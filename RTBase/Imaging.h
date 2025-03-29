@@ -224,6 +224,47 @@ enum TONEMAP
 
 class Film
 {
+	void none(float& r, float& g, float& b)
+	{
+		r *= 255;
+		g *= 255;
+		b *= 255;
+	}
+
+	void liner(float& r, float& g, float& b)
+	{
+		r = powf(std::max(r, 0.0f), inv2p2) * 255;
+		g = powf(std::max(g, 0.0f), inv2p2) * 255;
+		b = powf(std::max(b, 0.0f), inv2p2) * 255;
+	}
+
+	void linerWithExposure(float& r, float& g, float& b, float exposure = 1.0f)
+	{
+		const float e = std::pow(2.0f, exposure * inv2p2);
+		r = powf(std::max(r, 0.0f), inv2p2) * e * 255;
+		g = powf(std::max(g, 0.0f), inv2p2) * e * 255;
+		b = powf(std::max(b, 0.0f), inv2p2) * e * 255;
+	}
+
+	void ReinhardGlobal(float& r, float& g, float& b)
+	{
+		r = powf(std::max(r / (1.0f + r), 0.0f), inv2p2) * 255;
+		g = powf(std::max(g / (1.0f + g), 0.0f), inv2p2) * 255;
+		b = powf(std::max(b / (1.0f + b), 0.0f), inv2p2) * 255;
+	}
+
+	float CX(float x) const
+	{
+		return std::fabs((x * (A * x + CB) + DE) / (x * (A * x + B) + DF) - EbF);
+	}
+
+	void filmic(float& r, float& g, float& b)
+	{
+		r = CX(r) * invCW * 255.0f;
+		g = CX(g) * invCW * 255.0f;
+		b = CX(b) * invCW * 255.0f;
+	}
+
 public:
 	Colour* film;
 	unsigned int width;
@@ -268,50 +309,9 @@ public:
 		}
 	}
 
-	void none(float& r, float& g, float& b)
+	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, int spp, TONEMAP toneMap = TM_LINEAR)
 	{
-		r *= 255;
-		g *= 255;
-		b *= 255;
-	}
-
-	void liner(float& r, float& g, float& b)
-	{
-		r = powf(std::max(r, 0.0f), inv2p2) * 255;
-		g = powf(std::max(g, 0.0f), inv2p2) * 255;
-		b = powf(std::max(b, 0.0f), inv2p2) * 255;
-	}
-
-	void linerWithExposure(float& r, float& g, float& b, float exposure = 1.0f)
-	{
-		const float e = std::pow(2.0f, exposure * inv2p2);
-		r = powf(std::max(r, 0.0f), inv2p2) * e * 255;
-		g = powf(std::max(g, 0.0f), inv2p2) * e * 255;
-		b = powf(std::max(b, 0.0f), inv2p2) * e * 255;
-	}
-
-	void ReinhardGlobal(float& r, float& g, float& b)
-	{
-		r = powf(std::max(r / (1.0f + r), 0.0f), inv2p2) * 255;
-		g = powf(std::max(g / (1.0f + g), 0.0f), inv2p2) * 255;
-		b = powf(std::max(b / (1.0f + b), 0.0f), inv2p2) * 255;
-	}
-
-	float CX(float x) const
-	{
-		return std::fabs((x * (A * x + CB) + DE) / (x * (A * x + B) + DF) - EbF);
-	}
-
-	void filmic(float& r, float& g, float& b)
-	{
-		r = CX(r) * invCW * 255.0f;
-		g = CX(g) * invCW * 255.0f;
-		b = CX(b) * invCW * 255.0f;
-	}
-
-	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, TONEMAP toneMap = TM_LINEAR)
-	{
-		Colour pixel = film[(y * width) + x] / (float)SPP;
+		Colour pixel = film[(y * width) + x] / (float)spp;
 
 		float fr = std::max(pixel.r, 0.0f);
 		float fg = std::max(pixel.g, 0.0f);
@@ -333,6 +333,17 @@ public:
 		r = std::min(fr, 255.f);
 		g = std::min(fg, 255.f);
 		b = std::min(fb, 255.f);
+	}
+
+	std::vector<float> getLums(unsigned int startx, unsigned int starty, unsigned int endx, unsigned int endy)
+	{
+		std::vector<float> lums;
+
+		for (unsigned int x = startx; x < endx; x++)
+			for (unsigned int y = starty; y < endy; y++)
+				lums.emplace_back(film[y * width + x].Lum());
+
+		return lums;
 	}
 
 	// Do not change any code below this line

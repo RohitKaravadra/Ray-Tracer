@@ -11,14 +11,15 @@
 #include <thread>
 #include <functional>
 
-#define MAX_DEPTH 5
+#define MAX_DEPTH 10
 
 enum DRAWMODE
 {
-	DM_NORMALS = 0,
-	DM_ALBEDO = 1,
-	DM_DIRECT = 2,
-	DM_PATHTRACE = 3
+	DM_NORMALS,
+	DM_ALBEDO,
+	DM_DIRECT,
+	DM_PATH_TRACE,
+	DM_LIGHT_TRACE
 };
 
 struct MISData
@@ -41,10 +42,15 @@ public:
 	unsigned int totalTiles;
 	unsigned int totalXTiles;
 	const unsigned int tileSize = 16;
+
 	std::atomic<unsigned int> tileCounter;
+	std::vector<unsigned int> tileSamples;
 
 	DRAWMODE drawMode = DM_ALBEDO;
 	TONEMAP toneMap = TM_LINEAR;
+
+	unsigned int initSamples = 20;
+	unsigned int totalSamples = 2000;
 
 	~RayTracer()
 	{
@@ -96,12 +102,100 @@ public:
 		totalXTiles = (canvas->getWidth() + tileSize - 1) / tileSize;
 		float totalYTiles = (canvas->getHeight() + tileSize - 1) / tileSize;
 		totalTiles = totalXTiles * totalYTiles;
+		tileSamples.resize(totalTiles);
 
 		tileCounter.store(0);
 	}
 	void clear()
 	{
 		film->clear();
+	}
+
+	void connectToCamera(Vec3 p, Vec3 n, Colour col)
+	{
+		float x, y;
+		// project point on camera if possible
+		if (scene->camera.projectOntoCamera(p, x, y))
+		{
+			// check if point is visible from camera
+			if (!scene->visible(p, scene->camera.origin))
+				return;
+
+			Vec3 toCamDir = (scene->camera.origin - p).normalize();
+			float cosTheta = Dot(toCamDir, n);
+			float we = 1 / (SQ(cosTheta) * SQ(cosTheta) * scene->camera.Afilm);
+
+			film->splat(x, y, col * we);
+		}
+	}
+
+	void lightTracePath(Ray& r, Colour pathThroughput, Colour Le, Sampler* sampler, int depth = 0)
+	{
+
+		// Traverse the scene to find an intersection
+		IntersectionData intersection = scene->traverse(r);
+		ShadingData shadingData = scene->calculateShadingData(intersection, r);
+
+		if (shadingData.t < FLT_MAX)  // If the ray hits something
+		{
+			// If the hit surface is another light, stop
+			if (shadingData.bsdf->isLight())
+				return;
+
+			// Is surface is specular we cannot computing direct lighting
+			if (shadingData.bsdf->isPureSpecular() == true)
+				return;
+
+			// If the hit surface is visible to the camera, connect it
+			connectToCamera(shadingData.x, shadingData.sNormal, pathThroughput);
+
+			// Max recursion depth check
+			if (depth >= MAX_DEPTH)
+				return;
+
+			// Russian Roulette for termination
+			float russianRouletteProbability = min(pathThroughput.Lum(), 0.9f);
+			if (sampler->next() >= russianRouletteProbability)
+				return;
+
+			pathThroughput = pathThroughput / russianRouletteProbability;
+
+			// Sample new direction for indirect lighting
+			Colour bsdf;
+			float pdf;
+			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, bsdf, pdf);
+
+			// Update path throughput
+			pathThroughput = pathThroughput * bsdf * fabsf(wi.dot(shadingData.sNormal)) / pdf;
+
+			// Create new ray
+			r.init(shadingData.x + wi, wi);
+
+			// Continue tracing the path recursively
+			lightTracePath(r, pathThroughput, Le, sampler, depth + 1);
+		}
+	}
+
+	void lightTrace(Sampler* sampler)
+	{
+		// Sample a light
+		float pmf;
+		Light* light = scene->sampleLight(sampler, pmf);
+
+		// Sample a point on the light
+		float pdfPos, pdfDir;
+		Colour emitted;
+		Vec3 p = light->samplePositionFromLight(sampler, pdfPos);
+		Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDir);
+
+		Colour Le = light->evaluate(-wi) / (pdfDir * pdfPos);
+
+		connectToCamera(p, p + wi, Le);
+
+		Ray ray(p, wi);
+		Colour pathThroughput(1.0f, 1.0f, 1.0f);
+
+		lightTracePath(ray, pathThroughput, Le, sampler);
 	}
 
 	Colour computeDirect(ShadingData shadingData, Sampler* sampler, float misPdf = 0)
@@ -166,9 +260,6 @@ public:
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
 
-		//float t = scene->background->PDF(shadingData, r.dir);
-		//return Colour(t, t, t);
-
 		if (shadingData.t < FLT_MAX)
 		{
 			if (shadingData.bsdf->isLight())
@@ -177,9 +268,8 @@ public:
 					: Colour(0.0f, 0.0f, 0.0f);
 			}
 
-
 			// max depth reached
-			if (depth > MAX_DEPTH)
+			if (depth >= MAX_DEPTH)
 				return pathThroughput * computeDirect(shadingData, sampler);
 
 			// russian roulette
@@ -267,33 +357,73 @@ public:
 		{
 			for (unsigned int x = 0; x < film->width; x++)
 			{
-				float px = x + (drawMode == DM_PATHTRACE ? samplers[0]->next() : 0.5f);
-				float py = y + (drawMode == DM_PATHTRACE ? samplers[0]->next() : 0.5f);
-				Ray ray = scene->camera.generateRay(px, py);
-
-				Colour col;
-				switch (drawMode)
+				if (drawMode == DM_LIGHT_TRACE)
 				{
-				case DM_NORMALS:
-					col = viewNormals(ray);
-					break;
-				case DM_ALBEDO:
-					col = albedo(ray);
-					break;
-				case DM_DIRECT:
-					col = direct(ray, samplers[0]);
-					break;
-				case DM_PATHTRACE:
-					col = pathTrace(ray, samplers[0]);
-					break;
+					lightTrace(samplers[0]);
+				}
+				else
+				{
+					float px = x + (drawMode == DM_PATH_TRACE ? samplers[0]->next() : 0.5f);
+					float py = y + (drawMode == DM_PATH_TRACE ? samplers[0]->next() : 0.5f);
+					Ray ray = scene->camera.generateRay(px, py);
+
+					Colour col;
+					switch (drawMode)
+					{
+					case DM_NORMALS:
+						col = viewNormals(ray);
+						break;
+					case DM_ALBEDO:
+						col = albedo(ray);
+						break;
+					case DM_DIRECT:
+						col = direct(ray, samplers[0]);
+						break;
+					case DM_PATH_TRACE:
+						col = pathTrace(ray, samplers[0]);
+						break;
+					}
+
+					film->splat(px, py, col);
 				}
 
-				film->splat(px, py, col);
 				unsigned char r, g, b;
 				film->tonemap(x, y, r, g, b, toneMap);
 
 				canvas->draw(x, y, r, g, b);
 			}
+		}
+	}
+
+	unsigned int calculateSamples()
+	{
+		unsigned int i;
+		while ((i = tileCounter.fetch_add(1)) < totalTiles)
+		{
+			unsigned int startx = (i % totalXTiles) * tileSize;
+			unsigned int starty = (i / totalXTiles) * tileSize;
+
+			unsigned int endx = min(startx + tileSize, film->width);
+			unsigned int endy = min(starty + tileSize, film->height);
+			std::vector<float> lums = film->getLums(startx, starty, endx, endy);
+
+			// Compute average luminance
+			float total = 0.0f;
+			for (float lum : lums)
+				total += lum;
+
+			float mean = (lums.empty()) ? 0.0f : total / lums.size();
+
+			// Compute variance
+			float variance = 0.0f;
+			for (float lum : lums)
+				variance += (lum - mean) * (lum - mean);
+
+			variance = (lums.empty()) ? 0.0f : variance / lums.size();
+
+			float weight = variance / (variance + mean * mean + EPSILON); // Example weighting formula
+
+			tileSamples[i] = totalSamples * weight + initSamples;
 		}
 	}
 
@@ -312,30 +442,43 @@ public:
 			{
 				for (unsigned int x = startx; x < endx; x++)
 				{
-					float px = x + (drawMode == DM_PATHTRACE ? samplers[id]->next() : 0.5f);
-					float py = y + (drawMode == DM_PATHTRACE ? samplers[id]->next() : 0.5f);
-					Ray ray = scene->camera.generateRay(px, py);
-
-					Colour col;
-					switch (drawMode)
-					{
-					case DM_NORMALS:
-						col = viewNormals(ray);
-						break;
-					case DM_ALBEDO:
-						col = albedo(ray);
-						break;
-					case DM_DIRECT:
-						col = direct(ray, samplers[id]);
-						break;
-					case DM_PATHTRACE:
-						col = pathTrace(ray, samplers[id]);
-						break;
-					}
-
-					film->splat(px, py, col);
 					unsigned char r, g, b;
-					film->tonemap(x, y, r, g, b, toneMap);
+
+					// only calculate if enought samples are not calculated
+					if (film->SPP <= initSamples || film->SPP < tileSamples[i])
+					{
+						if (drawMode == DM_LIGHT_TRACE)
+						{
+							lightTrace(samplers[0]);
+						}
+						else
+						{
+							float px = x + (drawMode == DM_PATH_TRACE ? samplers[id]->next() : 0.5f);
+							float py = y + (drawMode == DM_PATH_TRACE ? samplers[id]->next() : 0.5f);
+							Ray ray = scene->camera.generateRay(px, py);
+
+							Colour col;
+							switch (drawMode)
+							{
+							case DM_NORMALS:
+								col = viewNormals(ray);
+								break;
+							case DM_ALBEDO:
+								col = albedo(ray);
+								break;
+							case DM_DIRECT:
+								col = direct(ray, samplers[id]);
+								break;
+							case DM_PATH_TRACE:
+								col = pathTrace(ray, samplers[id]);
+								break;
+							}
+							film->splat(px, py, col);
+						}
+						film->tonemap(x, y, r, g, b, film->SPP, toneMap);
+					}
+					else
+						film->tonemap(x, y, r, g, b, tileSamples[i], toneMap);
 
 					canvas->draw(x, y, r, g, b);
 				}
@@ -346,6 +489,7 @@ public:
 	void renderMT()
 	{
 		film->incrementSPP();
+
 		tileCounter.store(0);
 
 		for (int i = 0; i < numThreads; i++)
@@ -356,15 +500,31 @@ public:
 			threads[i]->join();
 			delete threads[i];
 		}
+
+		if (film->SPP == initSamples)
+		{
+			tileCounter.store(0);
+			for (int i = 0; i < numThreads; i++)
+				threads[i] = new std::thread(&RayTracer::calculateSamples, this);
+
+			for (int i = 0; i < numThreads; i++)
+			{
+				threads[i]->join();
+				delete threads[i];
+			}
+		}
 	}
-	int getSPP()
+
+	int getSPP() const
 	{
 		return film->SPP;
 	}
+
 	void saveHDR(std::string filename)
 	{
 		film->save(filename);
 	}
+
 	void savePNG(std::string filename)
 	{
 		stbi_write_png(filename.c_str(), canvas->getWidth(), canvas->getHeight(), 3, canvas->getBackBuffer(), canvas->getWidth() * 3);

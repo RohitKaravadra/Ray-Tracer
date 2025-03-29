@@ -141,11 +141,10 @@ public:
 	unsigned int width;
 	unsigned int height;
 
+	float totalLum;
 	std::vector<float> luminance;
 	std::vector<float> cdfRows;
 	std::vector<std::vector<float>> cdfCols;
-
-	float totalLum;
 
 	void clear()
 	{
