@@ -12,6 +12,13 @@
 
 constexpr float texelScale = 1.0f / 255.0f;
 
+enum IMAGE_FILTER
+{
+	FT_BOX,
+	FT_GAUSSIAN,
+	FT_MITCHELL_NETRAVALI
+};
+
 class Texture
 {
 public:
@@ -265,6 +272,22 @@ class Film
 		b = CX(b) * invCW * 255.0f;
 	}
 
+	void setFilter(IMAGE_FILTER _filter)
+	{
+		if (filter != nullptr)
+			delete filter;
+
+		switch (_filter)
+		{
+		case FT_BOX:filter = new BoxFilter();
+			break;
+		case FT_GAUSSIAN:filter = new GaussianFilter();
+			break;
+		case FT_MITCHELL_NETRAVALI:filter = new MitchellNetravaliFilter();
+			break;
+		}
+	}
+
 public:
 	Colour* film;
 	unsigned int width;
@@ -347,23 +370,26 @@ public:
 	}
 
 	// Do not change any code below this line
-	void init(int _width, int _height, ImageFilter* _filter)
+	void init(int _width, int _height, IMAGE_FILTER _filter)
 	{
 		width = _width;
 		height = _height;
 		film = new Colour[width * height];
 		clear();
-		filter = _filter;
+		setFilter(_filter);
 	}
+
 	void clear()
 	{
 		memset(film, 0, width * height * sizeof(Colour));
 		SPP = 0;
 	}
+
 	void incrementSPP()
 	{
 		SPP++;
 	}
+
 	void save(std::string filename)
 	{
 		Colour* hdrpixels = new Colour[width * height];

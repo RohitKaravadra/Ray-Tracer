@@ -55,10 +55,14 @@ int main(int argc, char* argv[])
 	};
 
 	// Initialize default parameters
-	unsigned int sceneNum = 1;
-	DRAWMODE drawMode = DM_PATH_TRACE;
+	unsigned int sceneNum = 3;
 	bool multiThreaded = true;
-	TONEMAP toneMap = TM_LINEAR;
+
+	SETTINGS settings;
+	settings.drawMode = DM_PATH_TRACE;
+	settings.toneMap = TM_LINEAR;
+	settings.filter = FT_BOX;
+	settings.TileBasedAdaptiveSampling = true;
 
 	std::string sceneName = "scenes/" + scenes[sceneNum];
 	std::string filename = "GI.hdr";
@@ -116,11 +120,9 @@ int main(int argc, char* argv[])
 
 	// Create ray tracer
 	RayTracer rt;
-	rt.init(scene, &canvas, 10);	// 10 threads
-
-	rt.drawMode = drawMode;
-	rt.toneMap = toneMap;
+	rt.settings = settings;
 	rt.totalSamples = SPP;
+	rt.init(scene, &canvas, 10);	// 10 threads
 
 	// Create timer
 	GamesEngineeringBase::Timer timer;

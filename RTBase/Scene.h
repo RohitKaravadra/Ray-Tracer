@@ -143,7 +143,7 @@ public:
 	Light* sampleLight(Sampler* sampler, float& pmf)
 	{
 		pmf = 1 / (float)lights.size();		// probability mass function
-		unsigned int i = sampler->next() * (lights.size() - 1);
+		unsigned int i = std::min(sampler->next() * lights.size(), lights.size() - 1.0f);
 		return lights[i];
 	}
 
