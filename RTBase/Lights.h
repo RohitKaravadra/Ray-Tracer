@@ -246,7 +246,7 @@ public:
 		float cPDF = (col == 0) ? cdfCols[row][col] : (cdfCols[row][col] - cdfCols[row][col - 1]);
 
 		// Normalize by pixel count
-		float pdf = (mPDF * cPDF) / (width * height);
+		float pdf = (mPDF * cPDF) * (width * height);
 		return pdf < EPSILON ? EPSILON : pdf;
 	}
 
@@ -267,6 +267,7 @@ public:
 		float theta = acosf(1.0f - 2.0f * v);
 
 		float sinTheta = sinf(theta);
+
 		// Convert (theta, phi) to Cartesian direction
 		Vec3 wi;
 		wi.x = sinTheta * cosf(phi);
@@ -286,6 +287,7 @@ public:
 		float theta = acosf(1.0f - 2.0f * row / (float)height);
 
 		float sinTheta = sinf(theta);
+
 		// Convert (theta, phi) to Cartesian direction
 		Vec3 wi;
 		wi.x = sinTheta * cosf(phi);
@@ -334,8 +336,8 @@ public:
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
 	{
-		//return sampleSpherical(shadingData, sampler, reflectedColour, pdf);
-		return sampleTabulated(shadingData, sampler, reflectedColour, pdf);
+		return sampleSpherical(shadingData, sampler, reflectedColour, pdf);
+		//return sampleTabulated(shadingData, sampler, reflectedColour, pdf);
 	}
 
 	Colour evaluate(const Vec3& wi)
@@ -350,7 +352,7 @@ public:
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
-		//return SamplingDistributions::uniformHemispherePDF(wi);
+		return SamplingDistributions::uniformHemispherePDF(wi);
 		float u = atan2f(wi.z, wi.x);
 		u = (u < 0.0f) ? u + (2.0f * M_PI) : u;
 		u = u / (2.0f * M_PI);

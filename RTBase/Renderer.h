@@ -10,6 +10,7 @@
 #include "GamesEngineeringBase.h"
 #include <thread>
 #include <functional>
+#include <mutex>
 
 #define MAX_DEPTH 5
 
@@ -23,19 +24,32 @@ enum DRAWMODE
 	DM_INSTANT_RADIOSITY
 };
 
-enum RADIOSITY_PASS
-{
-	RP_VPL_PASS,
-	RP_DIRECT_PASS
-};
-
 struct SETTINGS
 {
-	DRAWMODE drawMode = DM_ALBEDO;
-	TONEMAP toneMap = TM_LINEAR;
-	IMAGE_FILTER filter = FT_BOX;
+	DRAWMODE drawMode;
+	TONEMAP toneMap;
+	IMAGE_FILTER filter;
 
 	bool TileBasedAdaptiveSampling;
+	bool canHitLight;
+
+	unsigned int numThreads;
+	unsigned int initSPP;
+	unsigned int totalSPP;
+
+	SETTINGS()
+	{
+		drawMode = DM_NORMALS;
+		toneMap = TM_NONE;
+		filter = FT_BOX;
+
+		TileBasedAdaptiveSampling = false;
+		canHitLight = false;
+
+		numThreads = 3;
+		initSPP = 10;
+		totalSPP = 8192;
+	}
 };
 
 struct VPL
@@ -62,11 +76,10 @@ public:
 	std::atomic<unsigned int> tileCounter;
 	std::vector<unsigned int> tileSamples;
 
-	SETTINGS settings;
-	RADIOSITY_PASS radiosityPass;
+	std::vector<VPL> vpls;
+	std::mutex vplMtx;
 
-	unsigned int initSamples = 20;
-	unsigned int totalSamples = 1000;
+	SETTINGS settings;
 
 	~RayTracer()
 	{
@@ -90,10 +103,12 @@ public:
 
 	}
 
-	void init(Scene* _scene, GamesEngineeringBase::Window* _canvas, unsigned int _numThreads = 3)
+	void init(Scene* _scene, GamesEngineeringBase::Window* _canvas, SETTINGS _settings)
 	{
 		scene = _scene;
 		canvas = _canvas;
+		settings = _settings;
+
 		film = new Film();
 		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, settings.filter);
 		SYSTEM_INFO sysInfo;
@@ -101,11 +116,9 @@ public:
 		numProcs = sysInfo.dwNumberOfProcessors;
 
 		if (!settings.TileBasedAdaptiveSampling)
-			initSamples = totalSamples;
+			settings.initSPP = settings.totalSPP;
 
-		radiosityPass = RP_VPL_PASS;
-
-		setMultithreading(_numThreads);
+		setMultithreading(settings.numThreads);
 	}
 
 	void setMultithreading(unsigned int _numThreads)
@@ -140,6 +153,8 @@ public:
 	{
 		film->clear();
 	}
+
+	// RADIOSITY #####################################################################################################
 
 	void VPLTracePath(Ray& r, Colour pathThroughput, Colour Le, Sampler* sampler, int depth = 0)
 	{
@@ -176,18 +191,23 @@ public:
 			vpl.shadingData = shadingData;
 			vpl.Le = pathThroughput * Le;
 
-			// add vpl to container
+			// update vpls list
+			vplMtx.lock();
+			vpls.emplace_back(vpl);
+			vplMtx.unlock();
 
 			// Create new ray
 			r.init(shadingData.x, wi);
 
 			// Continue tracing the path recursively
-			lightTracePath(r, pathThroughput, Le, sampler, depth + 1);
+			VPLTracePath(r, pathThroughput, Le, sampler, depth + 1);
 		}
 	}
 
-	void traceVPLs(Sampler* sampler, int count)
+	void traceVPLs(unsigned int id, int count)
 	{
+		Sampler* sampler = samplers[id];
+
 		// Sample a light
 		float pmf;
 		Light* light = scene->sampleLight(sampler, pmf);
@@ -202,31 +222,88 @@ public:
 		vpl.shadingData = shadingData;
 		vpl.Le = Le / (pmf * pdfPos * (float)count);
 
-		// add vpl to container
+		// update vpls list
+		vplMtx.lock();
+		vpls.emplace_back(vpl);
+		vplMtx.unlock();
 
 		Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDir);
 
 		Le = Le * Dot(wi, light->normal(shadingData, wi) / (pmf * pdfPos * pdfDir * (float)count));
 		Ray ray(p, wi);
 		Colour pathThroughput(1.0f, 1.0f, 1.0f);
+
 		VPLTracePath(ray, pathThroughput, Le, sampler);
 	}
 
-	void radiosityDirect()
+	Colour radiosityComputeDirect(ShadingData shadingData, Sampler* sampler)
 	{
+		// Is surface is specular we cannot computing direct lighting
+		if (shadingData.bsdf->isPureSpecular() == true)
+		{
+			return Colour(0.0f, 0.0f, 0.0f);
+		}
 
+		if (shadingData.bsdf->isLight())
+		{
+			return settings.canHitLight ? shadingData.bsdf->emit(shadingData, shadingData.wo)
+				: Colour(0.0f, 0.0f, 0.0f);
+		}
+
+		Colour accumulated(0.0f, 0.0f, 0.0f);
+
+		for (unsigned int i = 0; i < vpls.size(); i++)
+		{
+			//unsigned int index = (unsigned int)(sampler->next() * (vpls.size() - 1));
+			VPL vpl = vpls[i];
+
+			// Calculate G Term
+			Vec3 wi = vpl.shadingData.x - shadingData.x;
+			float l = wi.lengthSq();
+			wi = wi.normalize();
+
+			float gTerm = (max(Dot(wi, shadingData.sNormal), 0.0f) *
+				max(-Dot(wi, vpl.shadingData.sNormal), 0.0f)) / l;
+
+			// Shade if visible
+			if (gTerm > 0 && scene->visible(shadingData.x, vpl.shadingData.x))
+				accumulated = accumulated + shadingData.bsdf->evaluate(shadingData, wi) * vpl.Le * gTerm;
+		}
+		return accumulated;
 	}
 
-	void radiosity(Sampler* sampler)
+	Colour radiosityLightPass(Ray r, Sampler* sampler)
 	{
-		switch (radiosityPass)
+		// Traverse the scene to find an intersection
+		IntersectionData intersection = scene->traverse(r);
+		ShadingData shadingData = scene->calculateShadingData(intersection, r);
+
+		return shadingData.t < FLT_MAX ? radiosityComputeDirect(shadingData, sampler) :
+			scene->background->evaluate(r.dir);
+	}
+
+	void radiosityVplPass()
+	{
+		// clear past vpls
+		vpls.clear();
+
+		// number of rays per tile to trace
+		const unsigned int traceCount = 10;
+
+		// generated new vpls using multi threading
+		for (int i = 0; i < numThreads; i++)
+			threads[i] = new std::thread(&RayTracer::traceVPLs, this, i, traceCount);
+
+		for (int i = 0; i < numThreads; i++)
 		{
-		case RP_VPL_PASS:traceVPLs(sampler, 16 * 16);
-			break;
-		case RP_DIRECT_PASS:
-			break;
+			threads[i]->join();
+			delete threads[i];
 		}
 	}
+
+	//##############################################################################################################
+
+	// LIGHT TRACING #####################################################################################################
 
 	void connectToCamera(Vec3 p, Vec3 n, Colour col)
 	{
@@ -310,13 +387,18 @@ public:
 		Colour Le = light->evaluate(-wi) * cosTheta / pdfPos;
 
 		// connect to camera to draw light
-		connectToCamera(p, nLight, Le);
+		if (settings.canHitLight)
+			connectToCamera(p, nLight, Le);
 
 		Ray ray(p, wi);
 		Colour pathThroughput(1.0f, 1.0f, 1.0f);
 
 		lightTracePath(ray, pathThroughput, Le, sampler);
 	}
+
+	// #############################################################################################################
+
+	// PATH TRACE #####################################################################################################
 
 	Colour computeDirect(ShadingData shadingData, Sampler* sampler, float misPdf = 0)
 	{
@@ -375,7 +457,7 @@ public:
 		return Colour(0.0f, 0.0f, 0.0f);
 	}
 
-	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, float misPdf = 0, bool canHitLight = true)
+	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, bool canHitLight, float misPdf = 0)
 	{
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
@@ -416,22 +498,25 @@ public:
 			Colour direct = pathThroughput * computeDirect(shadingData, sampler, pdf);
 
 			// trace new ray
-			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, pdf, shadingData.bsdf->isPureSpecular());
+			canHitLight = settings.canHitLight && shadingData.bsdf->isPureSpecular();
+			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, canHitLight, pdf);
 		}
 
 		if (depth <= 0)
-			return scene->background->evaluate(r.dir);// *pathThroughput;
+			return scene->background->evaluate(r.dir);
 
 		float pdf = scene->background->PDF(shadingData, r.dir);
 		float weight = pdf / (pdf + misPdf);
-		return scene->background->evaluate(r.dir) * weight / pdf;
+		return scene->background->evaluate(r.dir) * pathThroughput * weight / pdf;
 	}
 
 	Colour pathTrace(Ray& r, Sampler* sampler)
 	{
 		Colour pathThroughput(1.0f, 1.0f, 1.0f);
-		return pathTrace(r, pathThroughput, 0, sampler);
+		return pathTrace(r, pathThroughput, 0, sampler, settings.canHitLight);
 	}
+
+	// ###################################################################################################################
 
 	Colour direct(Ray& r, Sampler* sampler)
 	{
@@ -477,47 +562,53 @@ public:
 	void render()
 	{
 		film->incrementSPP();
-		for (unsigned int y = 0; y < film->height; y++)
+		if (settings.drawMode == DM_INSTANT_RADIOSITY)
+			radiosityVplPass();
+		else
 		{
-			for (unsigned int x = 0; x < film->width; x++)
+			for (unsigned int y = 0; y < film->height; y++)
 			{
-				if (settings.drawMode == DM_LIGHT_TRACE)
+				for (unsigned int x = 0; x < film->width; x++)
 				{
-					lightTrace(samplers[0]);
-				}
-				else
-				{
-					float px = x + (settings.drawMode == DM_PATH_TRACE ? samplers[0]->next() : 0.5f);
-					float py = y + (settings.drawMode == DM_PATH_TRACE ? samplers[0]->next() : 0.5f);
-					Ray ray = scene->camera.generateRay(px, py);
-
-					Colour col;
-					switch (settings.drawMode)
+					if (settings.drawMode == DM_LIGHT_TRACE)
 					{
-					case DM_NORMALS:
-						col = viewNormals(ray);
-						break;
-					case DM_ALBEDO:
-						col = albedo(ray);
-						break;
-					case DM_DIRECT:
-						col = direct(ray, samplers[0]);
-						break;
-					case DM_PATH_TRACE:
-						col = pathTrace(ray, samplers[0]);
-						break;
+						lightTrace(samplers[0]);
+					}
+					else
+					{
+						float px = x + (settings.drawMode == DM_PATH_TRACE ? samplers[0]->next() : 0.5f);
+						float py = y + (settings.drawMode == DM_PATH_TRACE ? samplers[0]->next() : 0.5f);
+						Ray ray = scene->camera.generateRay(px, py);
+
+						Colour col;
+						switch (settings.drawMode)
+						{
+						case DM_NORMALS:
+							col = viewNormals(ray);
+							break;
+						case DM_ALBEDO:
+							col = albedo(ray);
+							break;
+						case DM_DIRECT:
+							col = direct(ray, samplers[0]);
+							break;
+						case DM_PATH_TRACE:
+							col = pathTrace(ray, samplers[0]);
+							break;
+						}
+
+						film->splat(px, py, col);
 					}
 
-					film->splat(px, py, col);
+					unsigned char r, g, b;
+					film->tonemap(x, y, r, g, b, settings.toneMap);
+					canvas->draw(x, y, r, g, b);
 				}
-
-				unsigned char r, g, b;
-				film->tonemap(x, y, r, g, b, settings.toneMap);
-
-				canvas->draw(x, y, r, g, b);
 			}
 		}
 	}
+
+	// MULTI THREADING #####################################################################################################
 
 	void calculateSamples()
 	{
@@ -547,7 +638,7 @@ public:
 
 			float weight = clamp(variance / (variance + mean * mean + EPSILON), EPSILON, 1.0f); // Example weighting formula
 
-			tileSamples[i] = totalSamples * weight + initSamples;
+			tileSamples[i] = (settings.totalSPP - settings.initSPP) * weight;
 		}
 	}
 
@@ -566,45 +657,44 @@ public:
 			{
 				for (unsigned int x = startx; x < endx; x++)
 				{
-					unsigned char r, g, b;
-					int spp = film->SPP;	// set sample per pixel for tonemap
+					unsigned int spp = film->SPP;
 
 					if (settings.drawMode == DM_LIGHT_TRACE)
 					{
 						lightTrace(samplers[id]);
 					}
-					else
+					else if (film->SPP <= settings.initSPP || film->SPP < tileSamples[i])
 					{
 						// only calculate if enought samples are not calculated
-						if (film->SPP <= initSamples || film->SPP < tileSamples[i])
+						float px = x + (settings.drawMode == DM_PATH_TRACE ? samplers[id]->next() : 0.5f);
+						float py = y + (settings.drawMode == DM_PATH_TRACE ? samplers[id]->next() : 0.5f);
+						Ray ray = scene->camera.generateRay(px, py);
+
+						Colour col;
+						switch (settings.drawMode)
 						{
-							float px = x + (settings.drawMode == DM_PATH_TRACE ? samplers[id]->next() : 0.5f);
-							float py = y + (settings.drawMode == DM_PATH_TRACE ? samplers[id]->next() : 0.5f);
-							Ray ray = scene->camera.generateRay(px, py);
-
-							Colour col;
-							switch (settings.drawMode)
-							{
-							case DM_NORMALS:
-								col = viewNormals(ray);
-								break;
-							case DM_ALBEDO:
-								col = albedo(ray);
-								break;
-							case DM_DIRECT:
-								col = direct(ray, samplers[id]);
-								break;
-							case DM_PATH_TRACE:
-								col = pathTrace(ray, samplers[id]);
-								break;
-							}
-							film->splat(px, py, col);
+						case DM_NORMALS:
+							col = viewNormals(ray);
+							break;
+						case DM_ALBEDO:
+							col = albedo(ray);
+							break;
+						case DM_DIRECT:
+							col = direct(ray, samplers[id]);
+							break;
+						case DM_PATH_TRACE:
+							col = pathTrace(ray, samplers[id]);
+							break;
+						case DM_INSTANT_RADIOSITY:
+							col = radiosityLightPass(ray, samplers[id]);
 						}
-						else
-							spp = tileSamples[i];	// set sample per pixel for currrent tile
+						film->splat(px, py, col);
 					}
+					else
+						spp = tileSamples[i];
 
-					// tinemap and draw pixel
+					// tonemap and draw pixel
+					unsigned char r, g, b;
 					film->tonemap(x, y, r, g, b, spp, settings.toneMap);
 					canvas->draw(x, y, r, g, b);
 				}
@@ -618,6 +708,11 @@ public:
 
 		tileCounter.store(0);
 
+		// check for radiosity vpl pass
+		if (settings.drawMode == DM_INSTANT_RADIOSITY)
+			radiosityVplPass();
+
+		// process all tiles
 		for (int i = 0; i < numThreads; i++)
 			threads[i] = new std::thread(&RayTracer::processTile, this, i);
 
@@ -627,7 +722,8 @@ public:
 			delete threads[i];
 		}
 
-		if (film->SPP == initSamples)
+		// calculate samples of tiles for adaptive sampling
+		if (film->SPP == settings.initSPP && settings.drawMode != DM_LIGHT_TRACE)
 		{
 			tileCounter.store(0);
 			for (int i = 0; i < numThreads; i++)
@@ -640,6 +736,8 @@ public:
 			}
 		}
 	}
+
+	// ##################################################################################################################
 
 	int getSPP() const
 	{

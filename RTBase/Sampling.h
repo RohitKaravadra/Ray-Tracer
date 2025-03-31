@@ -12,7 +12,7 @@ public:
 
 class MTRandom : public Sampler
 {
-	float epsilon = 1e-7f;
+	float epsilon = 1e-8f;
 public:
 	std::mt19937 generator;
 	std::uniform_real_distribution<float> dist;

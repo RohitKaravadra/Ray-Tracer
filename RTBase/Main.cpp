@@ -55,18 +55,21 @@ int main(int argc, char* argv[])
 	};
 
 	// Initialize default parameters
-	unsigned int sceneNum = 3;
+	unsigned int sceneNum = 0;
 	bool multiThreaded = true;
 
 	SETTINGS settings;
-	settings.drawMode = DM_PATH_TRACE;
+	settings.drawMode = DM_INSTANT_RADIOSITY;
 	settings.toneMap = TM_LINEAR;
 	settings.filter = FT_BOX;
-	settings.TileBasedAdaptiveSampling = true;
+
+	settings.TileBasedAdaptiveSampling = false;
+	settings.canHitLight = true;
+	settings.totalSPP = 8192;
+	settings.numThreads = 10;
 
 	std::string sceneName = "scenes/" + scenes[sceneNum];
 	std::string filename = "GI.hdr";
-	unsigned int SPP = 8192;
 
 	if (argc > 1)
 	{
@@ -104,7 +107,7 @@ int main(int argc, char* argv[])
 			}
 			if (pair.first == "-SPP")
 			{
-				SPP = stoi(pair.second);
+				settings.totalSPP = stoi(pair.second);
 			}
 		}
 	}
@@ -120,9 +123,7 @@ int main(int argc, char* argv[])
 
 	// Create ray tracer
 	RayTracer rt;
-	rt.settings = settings;
-	rt.totalSamples = SPP;
-	rt.init(scene, &canvas, 10);	// 10 threads
+	rt.init(scene, &canvas, settings);	// 10 threads
 
 	// Create timer
 	GamesEngineeringBase::Timer timer;
@@ -180,7 +181,7 @@ int main(int argc, char* argv[])
 			std::string ldrFilename = filename.substr(0, pos) + ".png";
 			rt.savePNG(ldrFilename);
 		}
-		if (SPP == rt.getSPP())
+		if (settings.totalSPP == rt.getSPP())
 		{
 			rt.saveHDR(filename);
 			running = false;
