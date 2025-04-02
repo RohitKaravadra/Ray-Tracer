@@ -157,7 +157,7 @@ public:
 	{
 		clear();
 
-		std::cout << "Creating TabulatedDistribution..." << std::endl;
+		std::cout << "Creating Tabulated Distribution..." << std::endl;
 
 		width = txt->width;
 		height = txt->height;
@@ -211,7 +211,7 @@ public:
 		}
 		cdfRows[height - 1] = 1.0f; // Ensure the last value is exactly 1.0
 
-		std::cout << "TabulatedDistribution created..." << std::endl;
+		std::cout << "Tabulated Distribution created..." << std::endl;
 	}
 
 	static int binarySearch(const std::vector<float>& cdf, float value) {

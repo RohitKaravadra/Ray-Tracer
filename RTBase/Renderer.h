@@ -12,8 +12,6 @@
 #include <functional>
 #include <mutex>
 
-#define MAX_DEPTH 5
-
 enum DRAWMODE
 {
 	DM_NORMALS,
@@ -36,6 +34,7 @@ struct SETTINGS
 	unsigned int numThreads;
 	unsigned int initSPP;
 	unsigned int totalSPP;
+	unsigned int maxBounces;
 
 	SETTINGS()
 	{
@@ -49,9 +48,11 @@ struct SETTINGS
 		numThreads = 3;
 		initSPP = 10;
 		totalSPP = 8192;
+		maxBounces = 5;
 	}
 };
 
+// vertual point light
 struct VPL
 {
 	ShadingData shadingData;
@@ -159,7 +160,7 @@ public:
 	void VPLTracePath(Ray& r, Colour pathThroughput, Colour Le, Sampler* sampler, std::vector<VPL>& vplList, int depth = 0)
 	{
 		// Max recursion depth check
-		if (depth >= MAX_DEPTH)
+		if (depth >= settings.maxBounces)
 			return;
 
 		// Traverse the scene to find an intersection
@@ -195,7 +196,7 @@ public:
 			vplList.emplace_back(vpl);
 
 			// Create new ray
-			r.init(shadingData.x, wi);
+			r.init(shadingData.x + (wi * EPSILON), wi);
 
 			// Continue tracing the path recursively
 			VPLTracePath(r, pathThroughput, Le, sampler, vplList, depth + 1);
@@ -348,7 +349,7 @@ public:
 	void lightTracePath(Ray& r, Colour pathThroughput, Colour Le, Sampler* sampler, int depth = 0)
 	{
 		// Max recursion depth check
-		if (depth >= MAX_DEPTH)
+		if (depth >= settings.maxBounces)
 			return;
 
 		// Traverse the scene to find an intersection
@@ -412,10 +413,14 @@ public:
 		if (settings.canHitLight)
 			connectToCamera(p, nLight, Le);
 
+		// normalize light if area light
+		if (light->isArea())
+			Le = Le * cosTheta;
+
 		Ray ray(p, wi);
 		Colour pathThroughput(1.0f, 1.0f, 1.0f);
 
-		lightTracePath(ray, pathThroughput, Le * cosTheta, sampler);
+		lightTracePath(ray, pathThroughput, Le, sampler);
 	}
 
 	// #############################################################################################################
@@ -494,17 +499,19 @@ public:
 					: Colour(0.0f, 0.0f, 0.0f);
 			}
 
+			// calculate direct lighting with MIS
+			Colour direct = pathThroughput * computeDirect(shadingData, sampler, misPdf);
+
 			// max depth reached
-			if (depth >= MAX_DEPTH)
-				return pathThroughput * computeDirect(shadingData, sampler);
+			if (depth >= settings.maxBounces)
+				return direct;
 
 			// russian roulette
 			float russianRouletteProbability = min(pathThroughput.Lum(), 0.9f);
+			if (russianRouletteProbability < sampler->next())
+				return direct;
 
-			if (sampler->next() < russianRouletteProbability)
-				pathThroughput = pathThroughput / russianRouletteProbability;
-			else
-				return pathThroughput * computeDirect(shadingData, sampler);
+			pathThroughput = pathThroughput / russianRouletteProbability;
 
 			// sample new direction
 			Colour bsdf;
@@ -515,9 +522,6 @@ public:
 			pathThroughput = pathThroughput * bsdf * fabsf(wi.dot(shadingData.sNormal)) / pdf;
 			// create new ray
 			r.init(shadingData.x + (wi * EPSILON), wi);
-
-			// calculate direct lighting with MIS
-			Colour direct = pathThroughput * computeDirect(shadingData, sampler, pdf);
 
 			// trace new ray
 			canHitLight = settings.canHitLight && shadingData.bsdf->isPureSpecular();

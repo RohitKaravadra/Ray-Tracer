@@ -63,10 +63,13 @@ int main(int argc, char* argv[])
 	settings.toneMap = TM_LINEAR;
 	settings.filter = FT_BOX;
 
-	settings.TileBasedAdaptiveSampling = false;
 	settings.canHitLight = true;
+	settings.TileBasedAdaptiveSampling = false;
+	settings.initSPP = 10;
 	settings.totalSPP = 8192;
+
 	settings.numThreads = 10;
+	settings.maxBounces = 5;
 
 	std::string sceneName = "scenes/" + scenes[sceneNum];
 	std::string filename = "GI.hdr";

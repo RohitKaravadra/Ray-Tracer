@@ -43,11 +43,11 @@ public:
 		float eta = iorExt / iorInt;
 
 		// Calculate sin2ThetaI (refraction angle)
-		float sin2ThetaT = eta * eta * std::max(0.0f, 1.0f - cosTheta * cosTheta);
+		float sin2ThetaT = eta * eta * (1.0f - cosTheta * cosTheta);
 
 		// Total Internal Reflection check
 		if (sin2ThetaT >= 1.0f)
-			return 1.0f; // Total internal reflection
+			return 1.0f; 
 
 		// Calculate cosThetaT (refracted angle)
 		float cosThetaT = std::sqrt(1.0f - sin2ThetaT);
@@ -59,6 +59,7 @@ public:
 		// Return the averaged Fresnel term
 		return  (fParal * fParal + fPerp * fPerp) * 0.5f;
 	}
+
 	static Colour fresnelConductor(float cosTheta, Colour ior, Colour k)
 	{
 		Colour eta2k2 = ior * ior + k * k;
@@ -74,6 +75,7 @@ public:
 		// Return the averaged Fresnel term
 		return (fParal * fParal + fPerp * fPerp) * 0.5f;
 	}
+
 	static float lambdaGGX(Vec3 wi, float alpha)
 	{
 		float cosTheta = std::max(wi.z, EPSILON);
@@ -82,12 +84,14 @@ public:
 
 		return (sqrtf(1.0f + alpha * alpha * tan2Theta) - 1.0f) * 0.5f;
 	}
+
 	static float Gggx(Vec3 wi, Vec3 wo, float alpha)
 	{
 		float g1Wi = 1.0f / (1.0f + lambdaGGX(wi, alpha));
 		float g1Wo = 1.0f / (1.0f + lambdaGGX(wo, alpha));
 		return g1Wi * g1Wo;
 	}
+
 	static float Dggx(Vec3 h, float alpha)
 	{
 		// Add code here
@@ -282,34 +286,35 @@ public:
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 
 		// sample albedo
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / fabs(localWo.z);
+		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv);
 
 		float cosThetaI = localWo.z;
 
 		// Compute Fresnel reflection coefficient
 		float F = ShadingHelper::fresnelDielectric(cosThetaI, intIOR, extIOR);
-		float eta = cosThetaI > 0.0f ? (extIOR / intIOR) : (intIOR / extIOR);
-		// Compute sin square theta using Snell's Law
-		float sin2ThetaT = eta * eta * std::max(0.0f, 1.0f - cosThetaI * cosThetaI);
+		bool entering = cosThetaI > 0.0f;
+		float eta = entering ? (extIOR / intIOR) : (intIOR / extIOR);
 
 		Vec3 wi;
-		if (sin2ThetaT >= 1.0f || sampler->next() < F) // Reflect
+		if (sampler->next() < F) // Reflect
 		{
 			wi = Vec3(-localWo.x, -localWo.y, localWo.z);
 			pdf = F;
-			reflectedColour = reflectedColour * pdf;
+			reflectedColour = reflectedColour;
 		}
 		else // Refract
 		{
+			// Compute sin square theta using Snell's Law
+			float sin2ThetaT = eta * eta * std::max(0.0f, 1.0f - cosThetaI * cosThetaI);
 			float cosThetaT = sqrtf(1.0f - sin2ThetaT);
-			//wi = Vec3(-eta * localWo.x, -eta * localWo.y, 0);
-			wi = localWo * eta;
-			wi.z += (eta * cosThetaI - cosThetaT) * (localWo.z > 0.0f ? -1.0f : 1.0f);
+			wi = Vec3(-eta * localWo.x, -eta * localWo.y, entering ? -cosThetaT : cosThetaT);
 			pdf = 1.0f - F;
-			reflectedColour = reflectedColour * pdf * eta * eta;
+			reflectedColour = reflectedColour * eta * eta;
 		}
 
-		return shadingData.frame.toWorld(wi.normalize());
+		reflectedColour = reflectedColour * pdf / fabs(wi.z);
+		//pdf = 1.0f;
+		return shadingData.frame.toWorld(wi);
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
@@ -320,8 +325,7 @@ public:
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
-		float cosThetaI = shadingData.frame.toLocal(wi).z;
-		return ShadingHelper::fresnelDielectric(cosThetaI, intIOR, extIOR);
+		return 0.0f;
 	}
 
 	bool isPureSpecular()
@@ -331,7 +335,7 @@ public:
 
 	bool isTwoSided()
 	{
-		return false;
+		return true;
 	}
 
 	float mask(const ShadingData& shadingData)
