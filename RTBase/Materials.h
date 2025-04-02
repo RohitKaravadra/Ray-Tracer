@@ -409,9 +409,21 @@ public:
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
 	{
 		// Replace this with OrenNayar sampling code
+		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
+		float NdotL = std::max(wi.z, 0.0f);
+		float NdotV = std::max(shadingData.wo.z, 0.0f);
+
+		float thetaI = acosf(NdotL);
+		float thetaR = acosf(NdotV);
+		float alpha = std::max(thetaI, thetaR);
+		float beta = std::min(thetaI, thetaR);
+
+		float LdotV = std::max(Dot(wi, localWo), 0.0f);
 		pdf = wi.z / M_PI;
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
+		Colour rho = albedo->sample(shadingData.tu, shadingData.tv);
+
+		reflectedColour = (rho / M_PI) * (A + B * LdotV * sinf(alpha) * tanf(beta));
 		return shadingData.frame.toWorld(wi);
 	}
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)

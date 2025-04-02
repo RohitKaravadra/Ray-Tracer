@@ -227,11 +227,11 @@ public:
 			Vec3 nLight = light->normal(shadingData, wi);
 
 			float cosTheta = Dot(wi, nLight);
-			Colour Le = light->evaluate(-wi) / (pmf * pdfPos * pdfDir);
+			Colour Le = light->evaluate(-wi) * cosTheta / (pmf * pdfPos * pdfDir);
 
 			VPL vpl;
 			vpl.shadingData = ShadingData(p, nLight);
-			vpl.Le = Le / (pmf * pdfPos * (float)total);
+			vpl.Le = Le;
 
 			// update vpls list
 			vplList.emplace_back(vpl);
@@ -266,11 +266,11 @@ public:
 
 			// Calculate G Term
 			Vec3 wi = vpl.shadingData.x - shadingData.x;
-			float l = wi.lengthSq();
+			float lengthSq = wi.lengthSq();
 			wi = wi.normalize();
 
 			float gTerm = (max(Dot(wi, shadingData.sNormal), 0.0f) *
-				max(-Dot(wi, vpl.shadingData.sNormal), 0.0f)) / l;
+				max(-Dot(wi, vpl.shadingData.sNormal), 0.0f)) / lengthSq;
 
 			// Shade if visible
 			if (gTerm > 0 && scene->visible(shadingData.x, vpl.shadingData.x))
@@ -291,7 +291,9 @@ public:
 
 	void radiosityVplPass()
 	{
+		// list fo newly generated vpls by each thread
 		std::vector<std::vector<VPL>> vplLists(numThreads);
+
 		// generated new vpls using multi threading
 		for (int i = 0; i < numThreads; i++)
 			threads[i] = new std::thread(&RayTracer::traceVPLs, this, i, std::ref(vplLists[i]));
@@ -413,7 +415,7 @@ public:
 		Ray ray(p, wi);
 		Colour pathThroughput(1.0f, 1.0f, 1.0f);
 
-		lightTracePath(ray, pathThroughput, Le, sampler);
+		lightTracePath(ray, pathThroughput, Le * cosTheta, sampler);
 	}
 
 	// #############################################################################################################
@@ -441,11 +443,11 @@ public:
 		{
 			// Calculate G Term
 			Vec3 wi = p - shadingData.x;
-			float l = wi.lengthSq();
+			float lengthSq = wi.lengthSq();
 			wi = wi.normalize();
 
 			float gTerm = (max(Dot(wi, shadingData.sNormal), 0.0f) *
-				max(-Dot(wi, light->normal(shadingData, wi)), 0.0f)) / l;
+				max(-Dot(wi, light->normal(shadingData, wi)), 0.0f)) / lengthSq;
 
 			if (gTerm > 0)
 			{

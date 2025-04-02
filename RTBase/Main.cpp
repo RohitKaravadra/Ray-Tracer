@@ -55,11 +55,11 @@ int main(int argc, char* argv[])
 	};
 
 	// Initialize default parameters
-	unsigned int sceneNum = 0;
+	unsigned int sceneNum = 19;
 	bool multiThreaded = true;
 
 	SETTINGS settings;
-	settings.drawMode = DM_LIGHT_TRACE;
+	settings.drawMode = DM_PATH_TRACE;
 	settings.toneMap = TM_LINEAR;
 	settings.filter = FT_BOX;
 
