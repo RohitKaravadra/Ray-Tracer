@@ -142,13 +142,13 @@ public:
 	unsigned int height;
 
 	float totalLum;
-	std::vector<float> luminance;
+	std::vector<float> lum;
 	std::vector<float> cdfRows;
 	std::vector<std::vector<float>> cdfCols;
 
 	void clear()
 	{
-		luminance.clear();
+		lum.clear();
 		cdfRows.clear();
 		cdfCols.clear();
 	}
@@ -162,7 +162,7 @@ public:
 		width = txt->width;
 		height = txt->height;
 
-		luminance.resize(width * height);
+		lum.resize(width * height);
 		cdfRows.resize(height);
 		cdfCols.resize(height, std::vector<float>(width));
 
@@ -178,8 +178,8 @@ public:
 			for (int n = 0; n < width; n++)
 			{
 				unsigned int index = (i * width) + n;
-				luminance[index] = txt->texels[index].Lum() * st;
-				rowSum += luminance[index];
+				lum[index] = txt->texels[index].Lum() * st;
+				rowSum += lum[index];
 				cdfCols[i][n] = rowSum; // Store prefix sum (not normalized yet)
 			}
 
@@ -236,11 +236,8 @@ public:
 		return left;
 	}
 
-	float getPdf(float u, float v)
+	float getPdf(unsigned int row, unsigned int col)
 	{
-		unsigned int row = v * (height - 1);
-		unsigned int col = u * (width - 1);
-
 		// Marginal PDF (row) and conditional PDF (column)
 		float mPDF = (row == 0) ? cdfRows[row] : (cdfRows[row] - cdfRows[row - 1]);
 		float cPDF = (col == 0) ? cdfCols[row][col] : (cdfCols[row][col] - cdfCols[row][col - 1]);
@@ -250,17 +247,26 @@ public:
 		return pdf < EPSILON ? EPSILON : pdf;
 	}
 
+	float getPdf(float u, float v)
+	{
+		unsigned int row = v * (height - 1);
+		unsigned int col = u * (width - 1);
+
+		return getPdf(row, col);
+	}
+
+
 	Vec3 sample(Sampler* sampler, float& u, float& v, float& pdf)
 	{
-		int row = binarySearch(cdfRows, sampler->next());		// calculate row
-		int col = binarySearch(cdfCols[row], sampler->next());	// calculate column
-
-		// calculate uv
-		v = row / (float)height;
-		u = col / (float)width;
+		unsigned int row = binarySearch(cdfRows, sampler->next());		// calculate row
+		unsigned int col = binarySearch(cdfCols[row], sampler->next());	// calculate column
 
 		// calculate pdf
-		pdf = getPdf(u, v);
+		pdf = getPdf(row, col);
+
+		// calculate uv
+		v = row / (float)(height - 1.0f);
+		u = col / (float)(width - 1.0f);
 
 		// Convert (u, v) to spherical coordinates
 		float phi = u * 2.0f * M_PI;
@@ -283,8 +289,8 @@ public:
 		int col = binarySearch(cdfCols[row], sampler->next());	// calculate column
 
 		// Convert (u, v) to spherical coordinates
-		float phi = col * 2.0f * M_PI / (float)width;
-		float theta = acosf(1.0f - 2.0f * row / (float)height);
+		float phi = col * 2.0f * M_PI / (float)(width - 1.0f);
+		float theta = acosf(1.0f - 2.0f * row / (float)(height - 1.0f));
 
 		float sinTheta = sinf(theta);
 
@@ -301,7 +307,7 @@ public:
 	{
 		int row = v * (height - 1);
 		int col = u * (width - 1);
-		return luminance[row * width + col];
+		return lum[row * width + col];
 	}
 };
 
@@ -336,8 +342,8 @@ public:
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
 	{
-		return sampleSpherical(shadingData, sampler, reflectedColour, pdf);
-		//return sampleTabulated(shadingData, sampler, reflectedColour, pdf);
+		//return sampleSpherical(shadingData, sampler, reflectedColour, pdf);
+		return sampleTabulated(shadingData, sampler, reflectedColour, pdf);
 	}
 
 	Colour evaluate(const Vec3& wi)
@@ -346,13 +352,13 @@ public:
 		u = (u < 0.0f) ? u + (2.0f * M_PI) : u;
 		u = u / (2.0f * M_PI);
 		float v = acosf(wi.y) / M_PI;
-		//return Colour(1.0f, 1.0f, 1.0f) * tabDist.cdfCols[int(v * (tabDist.height - 1))][int(u * (tabDist.width - 1))];
+
 		return env->sample(u, v);
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
-		return SamplingDistributions::uniformHemispherePDF(wi);
+		//return SamplingDistributions::uniformHemispherePDF(wi);
 		float u = atan2f(wi.z, wi.x);
 		u = (u < 0.0f) ? u + (2.0f * M_PI) : u;
 		u = u / (2.0f * M_PI);
@@ -391,8 +397,8 @@ public:
 	Vec3 samplePositionFromLight(Sampler* sampler, float& pdf)
 	{
 		// Samples a point on the bounding sphere of the scene. Feel free to improve this.
-		Vec3 p = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
-		//Vec3 p = tabDist.sample(sampler) * 1000.0f;
+		//Vec3 p = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
+		Vec3 p = tabDist.sample(sampler);
 		p = p * use<SceneBounds>().sceneRadius;
 		p = p + use<SceneBounds>().sceneCentre;
 		pdf = 1.0f / (4 * M_PI * SQ(use<SceneBounds>().sceneRadius));
@@ -402,12 +408,12 @@ public:
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf)
 	{
 		// sample fromtabulated distribution
-		//float u, v;
-		//Vec3 wi = tabDist.sample(sampler, u, v, pdf);
-		//return wi;
+		float u, v;
+		Vec3 wi = tabDist.sample(sampler, u, v, pdf);
+		return wi;
 
 		// sample from uniform sphere
-		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
+		//Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
 		pdf = SamplingDistributions::cosineHemispherePDF(wi);
 		return wi;
 	}

@@ -156,7 +156,7 @@ public:
 
 	// RADIOSITY #####################################################################################################
 
-	void VPLTracePath(Ray& r, Colour pathThroughput, Colour Le, Sampler* sampler, int depth = 0)
+	void VPLTracePath(Ray& r, Colour pathThroughput, Colour Le, Sampler* sampler, std::vector<VPL>& vplList, int depth = 0)
 	{
 		// Max recursion depth check
 		if (depth >= MAX_DEPTH)
@@ -192,48 +192,55 @@ public:
 			vpl.Le = pathThroughput * Le;
 
 			// update vpls list
-			vplMtx.lock();
-			vpls.emplace_back(vpl);
-			vplMtx.unlock();
+			vplList.emplace_back(vpl);
 
 			// Create new ray
 			r.init(shadingData.x, wi);
 
 			// Continue tracing the path recursively
-			VPLTracePath(r, pathThroughput, Le, sampler, depth + 1);
+			VPLTracePath(r, pathThroughput, Le, sampler, vplList, depth + 1);
 		}
 	}
 
-	void traceVPLs(unsigned int id, int count)
+	void traceVPLs(unsigned int id, std::vector<VPL>& vplList)
 	{
 		Sampler* sampler = samplers[id];
 
-		// Sample a light
-		float pmf;
-		Light* light = scene->sampleLight(sampler, pmf);
+		int count = 1;
+		int total = count * numThreads;
 
-		ShadingData shadingData;
-		Colour Le;
-		float pdfPos, pdfDir;
+		for (unsigned int i = 0; i < count; i++)
+		{
+			// Sample a light
+			float pmf;
+			Light* light = scene->sampleLight(sampler, pmf);
 
-		Vec3 p = light->sample(shadingData, sampler, Le, pdfPos);
+			float pdfPos, pdfDir;
 
-		VPL vpl;
-		vpl.shadingData = shadingData;
-		vpl.Le = Le / (pmf * pdfPos * (float)count);
+			// Sample a point on the light
+			Vec3 p = light->samplePositionFromLight(sampler, pdfPos);
+			// sample direction from light
+			Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDir);
 
-		// update vpls list
-		vplMtx.lock();
-		vpls.emplace_back(vpl);
-		vplMtx.unlock();
+			ShadingData shadingData;
+			// calculate light emmision
+			Vec3 nLight = light->normal(shadingData, wi);
 
-		Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDir);
+			float cosTheta = Dot(wi, nLight);
+			Colour Le = light->evaluate(-wi) / (pmf * pdfPos * pdfDir);
 
-		Le = Le * Dot(wi, light->normal(shadingData, wi) / (pmf * pdfPos * pdfDir * (float)count));
-		Ray ray(p, wi);
-		Colour pathThroughput(1.0f, 1.0f, 1.0f);
+			VPL vpl;
+			vpl.shadingData = ShadingData(p, nLight);
+			vpl.Le = Le / (pmf * pdfPos * (float)total);
 
-		VPLTracePath(ray, pathThroughput, Le, sampler);
+			// update vpls list
+			vplList.emplace_back(vpl);
+
+			Ray ray(p, wi);
+			Colour pathThroughput(1.0f, 1.0f, 1.0f);
+
+			VPLTracePath(ray, pathThroughput, Le, sampler, vplList);
+		}
 	}
 
 	Colour radiosityComputeDirect(ShadingData shadingData, Sampler* sampler)
@@ -269,7 +276,7 @@ public:
 			if (gTerm > 0 && scene->visible(shadingData.x, vpl.shadingData.x))
 				accumulated = accumulated + shadingData.bsdf->evaluate(shadingData, wi) * vpl.Le * gTerm;
 		}
-		return accumulated;
+		return accumulated / vpls.size();
 	}
 
 	Colour radiosityLightPass(Ray r, Sampler* sampler)
@@ -284,20 +291,23 @@ public:
 
 	void radiosityVplPass()
 	{
-		// clear past vpls
-		vpls.clear();
-
-		// number of rays per tile to trace
-		const unsigned int traceCount = 10;
-
+		std::vector<std::vector<VPL>> vplLists(numThreads);
 		// generated new vpls using multi threading
 		for (int i = 0; i < numThreads; i++)
-			threads[i] = new std::thread(&RayTracer::traceVPLs, this, i, traceCount);
+			threads[i] = new std::thread(&RayTracer::traceVPLs, this, i, std::ref(vplLists[i]));
 
 		for (int i = 0; i < numThreads; i++)
 		{
 			threads[i]->join();
 			delete threads[i];
+		}
+
+		// clear past vpls
+		vpls.clear();
+
+		// merge all vpls in single list
+		for (const auto& v : vplLists) {
+			vpls.insert(vpls.end(), v.begin(), v.end());
 		}
 	}
 
@@ -309,17 +319,27 @@ public:
 	{
 		float x, y;
 		// project point on camera if possible
-		if (scene->camera.projectOntoCamera(p, x, y) && scene->visible(p, scene->camera.origin))
+		if (scene->camera.projectOntoCamera(p, x, y))
 		{
 			Vec3 toCamDir = (scene->camera.origin - p);
+			float lengthSq = toCamDir.lengthSq();
 			toCamDir = toCamDir.normalize();
 
-			float cosTheta = std::fabsf(Dot(toCamDir, scene->camera.viewDirection));
-			float cosThetaSq = SQ(cosTheta);
-			float we = 1.0f / (cosThetaSq * cosThetaSq * scene->camera.Afilm);
-			cosTheta = max(Dot(toCamDir, n), 0.0f);
+			float cosThetaS = Dot(toCamDir, n);
+			float cosThetaC = Dot(toCamDir, scene->camera.viewDirection);
 
-			film->splat(x, y, col * we * cosTheta);
+			float gTerm = max(cosThetaS, 0.0f) * max(-cosThetaC, 0.0f) / lengthSq;
+
+			if (gTerm > 0)
+			{
+				if (scene->visible(p, scene->camera.origin))
+				{
+					float cosThetaSq = SQ(cosThetaC);
+					float we = 1.0f / (cosThetaSq * cosThetaSq * scene->camera.Afilm);
+
+					film->splat(x, y, col * we * gTerm);
+				}
+			}
 		}
 	}
 
@@ -346,19 +366,20 @@ public:
 
 			pathThroughput = pathThroughput / russianRouletteProbability;
 
+			Vec3 wi = (scene->camera.origin - shadingData.x).normalize();
+			Colour col = pathThroughput * shadingData.bsdf->evaluate(shadingData, wi) * Le;
+			connectToCamera(shadingData.x, shadingData.sNormal, col);
+
 			// Sample new direction
 			Colour bsdf;
 			float pdf;
-			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, bsdf, pdf);
+			wi = shadingData.bsdf->sample(shadingData, sampler, bsdf, pdf);
 
 			// Update path throughput
 			pathThroughput = pathThroughput * bsdf * fabsf(wi.dot(shadingData.sNormal)) / pdf;
 
-			// If the hit surface is visible to the camera, connect it
-			connectToCamera(shadingData.x, shadingData.sNormal, pathThroughput);
-
 			// Create new ray
-			r.init(shadingData.x, wi);
+			r.init(shadingData.x + (wi * EPSILON), wi);
 
 			// Continue tracing the path recursively
 			lightTracePath(r, pathThroughput, Le, sampler, depth + 1);
@@ -380,11 +401,10 @@ public:
 
 		ShadingData shadingData;
 		// calculate light emmision
-		Vec3 nLight = light->normal(shadingData, -wi);
+		Vec3 nLight = light->normal(shadingData, wi);
 
-		Vec3 toCamDir = (scene->camera.origin - p).normalize();
-		float cosTheta = std::fabs(Dot(toCamDir, nLight));
-		Colour Le = light->evaluate(-wi) * cosTheta / pdfPos;
+		float cosTheta = Dot(wi, nLight);
+		Colour Le = light->evaluate(-wi) / (pmf * pdfPos * pdfDir);
 
 		// connect to camera to draw light
 		if (settings.canHitLight)
@@ -503,7 +523,7 @@ public:
 		}
 
 		if (depth <= 0)
-			return scene->background->evaluate(r.dir);
+			return scene->background->evaluate(r.dir) * pathThroughput;
 
 		float pdf = scene->background->PDF(shadingData, r.dir);
 		float weight = pdf / (pdf + misPdf);
@@ -608,9 +628,9 @@ public:
 		}
 	}
 
-	// MULTI THREADING #####################################################################################################
+	// TILE BASED ADAPTIVE SAMPLING ########################################################################################
 
-	void calculateSamples()
+	void calculateTileVariance()
 	{
 		unsigned int i;
 		while ((i = tileCounter.fetch_add(1)) < totalTiles)
@@ -635,12 +655,31 @@ public:
 				variance += (lum - mean) * (lum - mean);
 
 			variance = (lums.empty()) ? 0.0f : variance / lums.size();
-
 			float weight = clamp(variance / (variance + mean * mean + EPSILON), EPSILON, 1.0f); // Example weighting formula
 
 			tileSamples[i] = (settings.totalSPP - settings.initSPP) * weight;
 		}
 	}
+
+	void calculateTileSamples()
+	{
+		std::vector<std::vector<std::pair<int, float>>> varLists(numThreads);
+		tileCounter.store(0);
+
+		// calculate variance for each tile
+		for (int i = 0; i < numThreads; i++)
+			threads[i] = new std::thread(&RayTracer::calculateTileVariance, this);
+
+		for (int i = 0; i < numThreads; i++)
+		{
+			threads[i]->join();
+			delete threads[i];
+		}
+	}
+
+	// #####################################################################################################################
+
+	// MULTI THREADING #####################################################################################################
 
 	void processTile(unsigned int id)
 	{
@@ -705,7 +744,6 @@ public:
 	void renderMT()
 	{
 		film->incrementSPP();
-
 		tileCounter.store(0);
 
 		// check for radiosity vpl pass
@@ -724,17 +762,7 @@ public:
 
 		// calculate samples of tiles for adaptive sampling
 		if (film->SPP == settings.initSPP && settings.drawMode != DM_LIGHT_TRACE)
-		{
-			tileCounter.store(0);
-			for (int i = 0; i < numThreads; i++)
-				threads[i] = new std::thread(&RayTracer::calculateSamples, this);
-
-			for (int i = 0; i < numThreads; i++)
-			{
-				threads[i]->join();
-				delete threads[i];
-			}
-		}
+			calculateTileSamples();
 	}
 
 	// ##################################################################################################################

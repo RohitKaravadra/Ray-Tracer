@@ -59,7 +59,7 @@ int main(int argc, char* argv[])
 	bool multiThreaded = true;
 
 	SETTINGS settings;
-	settings.drawMode = DM_INSTANT_RADIOSITY;
+	settings.drawMode = DM_LIGHT_TRACE;
 	settings.toneMap = TM_LINEAR;
 	settings.filter = FT_BOX;
 
@@ -166,10 +166,10 @@ int main(int argc, char* argv[])
 
 		// Write stats to console
 		std::cout << "\033[F\033[F\033[F\033[F";
-		std::cout << "Samples    : " << rt.getSPP() << std::endl;
-		std::cout << "Time       : " << t << std::endl;
-		std::cout << "FPS        : " << (t > 0 ? 1.0f / t : FLT_MAX) << std::endl;
-		std::cout << "Total time : " << formatTime(totalTime) << std::endl;
+		std::cout << "Samples    : " << rt.getSPP() << "            \n";
+		std::cout << "Time       : " << t << "                      \n";
+		std::cout << "FPS        : " << (t > 0 ? 1.0f / t : FLT_MAX) << "              \n";
+		std::cout << "Total time : " << formatTime(totalTime) << "                     \n";
 
 		if (canvas.keyPressed('P'))
 		{
