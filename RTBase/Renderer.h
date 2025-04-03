@@ -504,7 +504,7 @@ public:
 			if (gTerm > 0)
 			{
 				// Trace
-				if (scene->visible(shadingData.x, shadingData.x + (p * 10000.0f)))
+				if (scene->visible(shadingData.x, shadingData.x + (p * 1000.0f)))
 				{
 					float weight = pdf / (pdf + misPdf);
 					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm * weight / (pmf * pdf);

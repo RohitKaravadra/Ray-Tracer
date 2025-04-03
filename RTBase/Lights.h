@@ -172,7 +172,7 @@ public:
 
 		for (int i = 0; i < height; i++)
 		{
-			float st = sinf(M_PI * (float)i / (float)height);  // calculate Sin-weighting
+			float st = sinf(((float)i / (float)height) * M_PI);  // calculate Sin-weighting
 			float rowSum = 0.0f;
 
 			for (int n = 0; n < width; n++)
@@ -265,8 +265,8 @@ public:
 		pdf = getPdf(row, col);
 
 		// calculate uv
-		v = row / (float)(height - 1.0f);
-		u = col / (float)(width - 1.0f);
+		v = (float)row / (float)(height - 1.0f);
+		u = (float)col / (float)(width - 1.0f);
 
 		// Convert (u, v) to spherical coordinates
 		float phi = u * 2.0f * M_PI;
@@ -277,8 +277,8 @@ public:
 		// Convert (theta, phi) to Cartesian direction
 		Vec3 wi;
 		wi.x = sinTheta * cosf(phi);
-		wi.y = sinTheta * sinf(phi);
-		wi.z = cosf(theta);
+		wi.y = cosf(theta);
+		wi.z = sinTheta * sinf(phi);
 
 		return wi;
 	}
@@ -297,8 +297,8 @@ public:
 		// Convert (theta, phi) to Cartesian direction
 		Vec3 wi;
 		wi.x = sinTheta * cosf(phi);
-		wi.y = sinTheta * sinf(phi);
-		wi.z = cosf(theta);
+		wi.y = cosf(theta);
+		wi.z = sinTheta * sinf(phi);
 
 		return wi;
 	}
