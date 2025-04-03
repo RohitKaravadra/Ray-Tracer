@@ -33,24 +33,17 @@ public:
 class ShadingHelper
 {
 public:
-	static float fresnelDielectric(float cosTheta, float iorInt, float iorExt)
+	static float fresnelDielectric(float cosTheta, float eta)
 	{
-		// check direction and swap ior if necessary
-		if (cosTheta < 0.0f)
-			std::swap(iorInt, iorExt);
-
-		// calculate relative ior
-		float eta = iorExt / iorInt;
-
 		// Calculate sin2ThetaI (refraction angle)
 		float sin2ThetaT = eta * eta * (1.0f - cosTheta * cosTheta);
 
 		// Total Internal Reflection check
 		if (sin2ThetaT >= 1.0f)
-			return 1.0f; 
+			return 1.0f;
 
 		// Calculate cosThetaT (refracted angle)
-		float cosThetaT = std::sqrt(1.0f - sin2ThetaT);
+		float cosThetaT = std::sqrtf(1.0f - sin2ThetaT);
 
 		// Compute the parallel and perpendicular Fresnel reflection coefficients
 		float fParal = (cosTheta - eta * cosThetaT) / (cosTheta + eta * cosThetaT);
@@ -233,7 +226,7 @@ public:
 		Vec3 wr = Vec3(-localWo.x, -localWo.y, localWo.z);
 		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / fabs(wr.z);
 
-		Colour F = ShadingHelper::fresnelConductor(fabs(localWo.z), eta, k);
+		Colour F = ShadingHelper::fresnelConductor(fabsf(localWo.z), eta, k);
 		pdf = 1.0f;
 		reflectedColour = F * reflectedColour;
 
@@ -273,12 +266,19 @@ public:
 	Texture* albedo;
 	float intIOR;
 	float extIOR;
+
+	float eta;
+	float invEta;
+
 	GlassBSDF() = default;
 	GlassBSDF(Texture* _albedo, float _intIOR, float _extIOR)
 	{
 		albedo = _albedo;
 		intIOR = _intIOR;
 		extIOR = _extIOR;
+
+		eta = extIOR / intIOR;
+		invEta = 1.0f / eta;
 	}
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
@@ -289,11 +289,12 @@ public:
 		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv);
 
 		float cosThetaI = localWo.z;
+		bool entering = cosThetaI > 0.0f;
+		cosThetaI = fabsf(cosThetaI);
 
 		// Compute Fresnel reflection coefficient
-		float F = ShadingHelper::fresnelDielectric(cosThetaI, intIOR, extIOR);
-		bool entering = cosThetaI > 0.0f;
-		float eta = entering ? (extIOR / intIOR) : (intIOR / extIOR);
+		float eta = entering ? this->eta : invEta;
+		float F = ShadingHelper::fresnelDielectric(cosThetaI, eta);
 
 		Vec3 wi;
 		if (sampler->next() < F) // Reflect
@@ -305,15 +306,14 @@ public:
 		else // Refract
 		{
 			// Compute sin square theta using Snell's Law
-			float sin2ThetaT = eta * eta * std::max(0.0f, 1.0f - cosThetaI * cosThetaI);
+			float sin2ThetaT = eta * eta * (1.0f - cosThetaI * cosThetaI);
 			float cosThetaT = sqrtf(1.0f - sin2ThetaT);
 			wi = Vec3(-eta * localWo.x, -eta * localWo.y, entering ? -cosThetaT : cosThetaT);
 			pdf = 1.0f - F;
 			reflectedColour = reflectedColour * eta * eta;
 		}
 
-		reflectedColour = reflectedColour * pdf / fabs(wi.z);
-		//pdf = 1.0f;
+		reflectedColour = reflectedColour * pdf / fabsf(wi.z);
 		return shadingData.frame.toWorld(wi);
 	}
 
@@ -335,7 +335,7 @@ public:
 
 	bool isTwoSided()
 	{
-		return true;
+		return false;
 	}
 
 	float mask(const ShadingData& shadingData)
@@ -474,6 +474,7 @@ public:
 	Texture* albedo;
 	float intIOR;
 	float extIOR;
+	float eta;
 	float alpha;
 	PlasticBSDF() = default;
 	PlasticBSDF(Texture* _albedo, float _intIOR, float _extIOR, float roughness)
@@ -482,6 +483,8 @@ public:
 		intIOR = _intIOR;
 		extIOR = _extIOR;
 		alpha = 1.62142f * sqrtf(roughness);
+
+		eta = extIOR / intIOR;
 	}
 	float alphaToPhongExponent()
 	{
@@ -492,7 +495,7 @@ public:
 		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
 		pdf = wi.z / M_PI;
 
-		float F = ShadingHelper::fresnelDielectric(wi.z, intIOR, extIOR);
+		float F = ShadingHelper::fresnelDielectric(wi.z, eta);
 		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * (1.0f + F) / M_PI;
 		return shadingData.frame.toWorld(wi);
 

@@ -64,12 +64,15 @@ int main(int argc, char* argv[])
 	settings.filter = FT_BOX;
 
 	settings.canHitLight = true;
+	settings.debug = false;
+
 	settings.TileBasedAdaptiveSampling = false;
 	settings.initSPP = 10;
 	settings.totalSPP = 8192;
 
 	settings.numThreads = 10;
 	settings.maxBounces = 5;
+	settings.vplRaysPerTile = 2;
 
 	std::string sceneName = "scenes/" + scenes[sceneNum];
 	std::string filename = "GI.hdr";

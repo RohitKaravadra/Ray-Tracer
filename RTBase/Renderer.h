@@ -30,11 +30,15 @@ struct SETTINGS
 
 	bool TileBasedAdaptiveSampling;
 	bool canHitLight;
+	bool debug;
 
 	unsigned int numThreads;
+	unsigned int maxBounces;
+
 	unsigned int initSPP;
 	unsigned int totalSPP;
-	unsigned int maxBounces;
+
+	unsigned int vplRaysPerTile;
 
 	SETTINGS()
 	{
@@ -44,11 +48,15 @@ struct SETTINGS
 
 		TileBasedAdaptiveSampling = false;
 		canHitLight = false;
+		debug = false;
 
 		numThreads = 3;
+		maxBounces = 5;
+
 		initSPP = 10;
 		totalSPP = 8192;
-		maxBounces = 5;
+
+		vplRaysPerTile = 1;
 	}
 };
 
@@ -207,10 +215,9 @@ public:
 	{
 		Sampler* sampler = samplers[id];
 
-		int count = 1;
-		int total = count * numThreads;
+		int total = settings.vplRaysPerTile * numThreads;
 
-		for (unsigned int i = 0; i < count; i++)
+		for (unsigned int i = 0; i < settings.vplRaysPerTile; i++)
 		{
 			// Sample a light
 			float pmf;
@@ -260,7 +267,8 @@ public:
 
 		Colour accumulated(0.0f, 0.0f, 0.0f);
 
-		for (unsigned int i = 0; i < vpls.size(); i++)
+		unsigned int total = vpls.size();
+		for (unsigned int i = 0; i < total; i++)
 		{
 			//unsigned int index = (unsigned int)(sampler->next() * (vpls.size() - 1));
 			VPL vpl = vpls[i];
@@ -277,7 +285,22 @@ public:
 			if (gTerm > 0 && scene->visible(shadingData.x, vpl.shadingData.x))
 				accumulated = accumulated + shadingData.bsdf->evaluate(shadingData, wi) * vpl.Le * gTerm;
 		}
-		return accumulated / vpls.size();
+		return accumulated / total;
+	}
+
+	float radiosityDebug(const Vec3& p, float& i)
+	{
+		const float rSq = SQ(0.03f);
+		for (auto vpl : vpls)
+		{
+			float lSq = (vpl.shadingData.x - p).lengthSq();
+			if (lSq < rSq)
+			{
+				i = lSq / rSq;
+				return true;
+			}
+		}
+		return false;
 	}
 
 	Colour radiosityLightPass(Ray r, Sampler* sampler)
@@ -285,6 +308,14 @@ public:
 		// Traverse the scene to find an intersection
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
+
+
+		if (settings.debug)
+		{
+			float i;
+			if (radiosityDebug(shadingData.x, i))
+				return Colour(1.0f, 0.0f, 0.0f) * (1.0f - i) + Colour(1.0f, 1.0f, 0.0f) * i;
+		}
 
 		return shadingData.t < FLT_MAX ? radiosityComputeDirect(shadingData, sampler) :
 			scene->background->evaluate(r.dir);
@@ -524,8 +555,7 @@ public:
 			r.init(shadingData.x + (wi * EPSILON), wi);
 
 			// trace new ray
-			canHitLight = settings.canHitLight && shadingData.bsdf->isPureSpecular();
-			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, canHitLight, pdf);
+			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, shadingData.bsdf->isPureSpecular(), pdf);
 		}
 
 		if (depth <= 0)
@@ -749,7 +779,14 @@ public:
 
 	void renderMT()
 	{
-		film->incrementSPP();
+		if (settings.debug)
+		{
+			film->clear();
+			film->SPP = 1;
+		}
+		else
+			film->incrementSPP();
+
 		tileCounter.store(0);
 
 		// check for radiosity vpl pass
