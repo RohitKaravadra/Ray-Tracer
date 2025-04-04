@@ -55,10 +55,12 @@ public:
 
 	static Colour fresnelConductor(float cosTheta, Colour ior, Colour k)
 	{
+		cosTheta = clamp(cosTheta, 0.0f, 1.0f);
+
 		Colour eta2k2 = ior * ior + k * k;
 
 		Colour cos2Theta = Colour(1.0f, 1.0f, 1.0f) * cosTheta * cosTheta;
-		Colour sin2Theta = Colour(1.0f, 1.0f, 1.0f) * std::max(0.0f, 1.0f - cosTheta * cosTheta);
+		Colour sin2Theta = Colour(1.0f, 1.0f, 1.0f) * (1.0f - cosTheta * cosTheta);
 
 		Colour fParal = (eta2k2 * cos2Theta - ior * 2 * cosTheta + sin2Theta) /
 			(eta2k2 * cos2Theta + ior * 2 * cosTheta + sin2Theta);
@@ -71,7 +73,7 @@ public:
 
 	static float lambdaGGX(Vec3 wi, float alpha)
 	{
-		float cosTheta = std::max(wi.z, EPSILON);
+		float cosTheta = fabsf(wi.z);
 		float cos2Theta = cosTheta * cosTheta;
 		float tan2Theta = (1.0f - cos2Theta) / cos2Theta;
 
@@ -87,8 +89,10 @@ public:
 
 	static float Dggx(Vec3 h, float alpha)
 	{
-		// Add code here
-		return 1.0f;
+		float cos2Theta = h.z * h.z;
+		float alpha2 = alpha * alpha;
+		float denom = cos2Theta * (alpha2 - 1.0f) + 1.0f;
+		return alpha2 / (M_PI * denom * denom);
 	}
 };
 
@@ -171,17 +175,17 @@ public:
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 
 		// reflected direction
-		Vec3 wr(-localWo.x, -localWo.y, localWo.z);
+		Vec3 wi(-localWo.x, -localWo.y, localWo.z);
 
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / fabs(wr.z);
+		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / fabs(wi.z);
 		pdf = 1.0f;
 
-		return shadingData.frame.toWorld(wr);
+		return shadingData.frame.toWorld(wi);
 	}
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Replace this with Mirror evaluation code
-		return albedo->sample(shadingData.tu, shadingData.tv) / shadingData.frame.toLocal(wi).z;
+		return albedo->sample(shadingData.tu, shadingData.tv) / fabsf(shadingData.frame.toLocal(wi).z);
 	}
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
@@ -211,6 +215,7 @@ public:
 	Colour k;
 	float alpha;
 	ConductorBSDF() = default;
+
 	ConductorBSDF(Texture* _albedo, Colour _eta, Colour _k, float roughness)
 	{
 		albedo = _albedo;
@@ -218,42 +223,90 @@ public:
 		k = _k;
 		alpha = 1.62142f * sqrtf(roughness);
 	}
+
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 
-		// reflected direction
-		Vec3 wr = Vec3(-localWo.x, -localWo.y, localWo.z);
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / fabs(wr.z);
-
 		Colour F = ShadingHelper::fresnelConductor(fabsf(localWo.z), eta, k);
-		pdf = 1.0f;
-		reflectedColour = F * reflectedColour;
+		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv);
 
-		return shadingData.frame.toWorld(wr);
+		Vec3 wi;
+		if (alpha < EPSILON)
+		{
+			// reflected direction
+			wi = Vec3(-localWo.x, -localWo.y, localWo.z);
+
+			reflectedColour = F * reflectedColour / fabs(wi.z);
+			pdf = 1.0f;
+		}
+		else
+		{
+			float r1 = sampler->next();
+			float r2 = sampler->next();
+
+			float cosTheta = sqrtf((1 - r1) / (r1 * (alpha * alpha - 1.0f) + 1.0f));
+			float sinTheta = sqrtf(1.0f - cosTheta * cosTheta);
+			float phi = 2 * M_PI * r2;
+
+			Vec3 wm(sinTheta * cosf(phi), sinTheta * sinf(phi), cosTheta);
+
+			wi = (-localWo + wm * Dot(localWo, wm) * 2.0f).normalize();
+
+			float ggx = ShadingHelper::Gggx(wi, localWo, alpha);
+			float D = ShadingHelper::Dggx(wm, alpha);
+
+			reflectedColour = reflectedColour * F * ggx * D / (4 * fabs(localWo.z) * fabs(wi.z));
+			pdf = D * fabsf(cosTheta / (4 * Dot(localWo, wm)));
+		}
+
+		return shadingData.frame.toWorld(wi);
 	}
+
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
-		// Replace this with Conductor evaluation code
-		//Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
-		//
-		//Colour F = ShadingHelper::fresnelConductor(fabs(localWo.z), eta, k);
-		//return F * albedo->sample(shadingData.tu, shadingData.tv) / fabs(localWo.z);
+		// treat as mirror
+		if (alpha < EPSILON)
+			return albedo->sample(shadingData.tu, shadingData.tv) / fabsf(shadingData.frame.toLocal(wi).z);
 
-		return Colour(0.0f, 0.0f, 0.0f);
+		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
+		Vec3 localWi = shadingData.frame.toLocal(wi);
+
+		Vec3 wm = (localWo + localWi).normalize();
+
+		Colour F = ShadingHelper::fresnelConductor(fabsf(localWo.z), eta, k);
+
+		float D = ShadingHelper::Dggx(wm, alpha);
+		float ggx = ShadingHelper::Gggx(localWi, localWo, alpha);
+
+		return albedo->sample(shadingData.tu, shadingData.tv) * F * D * ggx / (4.0f * fabsf(localWo.z) * fabsf(localWi.z));
 	}
+
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
-		return 0.0f;
+		// treat as mirror
+		if (alpha < EPSILON)
+			return 0.0f;
+
+		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
+		Vec3 localWi = shadingData.frame.toLocal(wi);
+
+		Vec3 wm = (localWo + localWi).normalize();
+		float D = ShadingHelper::Dggx(wm, alpha);
+
+		return D * fabsf(wm.z / (4 * Dot(localWo, wm)));
 	}
+
 	bool isPureSpecular()
 	{
 		return false;
 	}
+
 	bool isTwoSided()
 	{
 		return true;
 	}
+
 	float mask(const ShadingData& shadingData)
 	{
 		return albedo->sampleAlpha(shadingData.tu, shadingData.tv);
@@ -474,9 +527,13 @@ public:
 	Texture* albedo;
 	float intIOR;
 	float extIOR;
-	float eta;
 	float alpha;
+
+	float eta;
+	float phongExp;
+
 	PlasticBSDF() = default;
+
 	PlasticBSDF(Texture* _albedo, float _intIOR, float _extIOR, float roughness)
 	{
 		albedo = _albedo;
@@ -485,11 +542,9 @@ public:
 		alpha = 1.62142f * sqrtf(roughness);
 
 		eta = extIOR / intIOR;
+		phongExp = (2.0f / SQ(std::max(alpha, 0.001f))) - 2.0f;
 	}
-	float alphaToPhongExponent()
-	{
-		return (2.0f / SQ(std::max(alpha, 0.001f))) - 2.0f;
-	}
+
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
 	{
 		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
