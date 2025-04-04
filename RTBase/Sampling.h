@@ -35,9 +35,9 @@ public:
 	static Vec3 uniformSampleHemisphere(float r1, float r2)
 	{
 		float theta = acosf(r1);
-		float phy = M_PI * 2 * r2;
+		float phi = M_PI * 2 * r2;
 		float st = sinf(theta);
-		return Vec3(st * cosf(phy), st * sinf(phy), r1);
+		return Vec3(st * cosf(phi), st * sinf(phi), r1);
 	}
 
 	static float uniformHemispherePDF(const Vec3 wi)
@@ -50,9 +50,9 @@ public:
 	{
 		r1 = sqrtf(r1);
 		float theta = acosf(r1);
-		float phy = M_PI * 2 * r2;
+		float phi = M_PI * 2 * r2;
 		float st = sinf(theta);
-		return Vec3(st * cosf(phy), st * sinf(phy), r1);
+		return Vec3(st * cosf(phi), st * sinf(phi), r1);
 	}
 
 	static float cosineHemispherePDF(const Vec3 wi)
@@ -65,9 +65,9 @@ public:
 	{
 		r1 = 1 - 2 * r1;
 		float theta = acosf(r1);
-		float phy = M_PI * 2 * r2;
+		float phi = M_PI * 2 * r2;
 		float st = sinf(theta);
-		return Vec3(st * cosf(phy), st * sinf(phy), r1);
+		return Vec3(st * cosf(phi), st * sinf(phi), r1);
 	}
 
 	static float uniformSpherePDF(const Vec3& wi)

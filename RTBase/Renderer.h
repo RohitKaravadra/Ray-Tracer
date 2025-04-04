@@ -28,17 +28,18 @@ struct SETTINGS
 	TONEMAP toneMap;
 	IMAGE_FILTER filter;
 
-	bool TileBasedAdaptiveSampling;
+	bool useMis;					// multiple importance sampling
+	bool adaptiveSampling;			// tile based adaptive sampling
 	bool canHitLight;
 	bool debug;
 
-	unsigned int numThreads;
-	unsigned int maxBounces;
+	unsigned int numThreads;		// number of threads for multithreading
+	unsigned int maxBounces;		// max number of bounces for path tracing
 
-	unsigned int initSPP;
-	unsigned int totalSPP;
+	unsigned int initSPP;			// initial samples per pixel
+	unsigned int totalSPP;			// total samples per pixel
 
-	unsigned int vplRaysPerTile;
+	unsigned int vplRaysPerTile;	// number of rays per tile for VPLs
 
 	SETTINGS()
 	{
@@ -46,7 +47,8 @@ struct SETTINGS
 		toneMap = TM_NONE;
 		filter = FT_BOX;
 
-		TileBasedAdaptiveSampling = false;
+		useMis = false;
+		adaptiveSampling = false;
 		canHitLight = false;
 		debug = false;
 
@@ -124,7 +126,9 @@ public:
 		GetSystemInfo(&sysInfo);
 		numProcs = sysInfo.dwNumberOfProcessors;
 
-		if (!settings.TileBasedAdaptiveSampling)
+		// only use adaptive sampling for path tracing
+		settings.adaptiveSampling = settings.adaptiveSampling && settings.drawMode == DM_PATH_TRACE;
+		if (!settings.adaptiveSampling)
 			settings.initSPP = settings.totalSPP;
 
 		setMultithreading(settings.numThreads);
@@ -475,6 +479,8 @@ public:
 		Colour emitted;
 		Vec3 p = light->sample(shadingData, sampler, emitted, pdf);
 
+
+		pdf *= pmf;
 		if (light->isArea())
 		{
 			// Calculate G Term
@@ -491,8 +497,7 @@ public:
 				if (scene->visible(shadingData.x, p))
 				{
 					// Shade
-					float weight = pdf / (pdf + misPdf);
-					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm * weight / (pmf * pdf);
+					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm / pdf;
 				}
 			}
 		}
@@ -506,8 +511,10 @@ public:
 				// Trace
 				if (scene->visible(shadingData.x, shadingData.x + (p * 1000.0f)))
 				{
-					float weight = pdf / (pdf + misPdf);
-					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm * weight / (pmf * pdf);
+					// multiple importance sampling
+					float weight = settings.useMis ? pdf / (pmf + misPdf) : 1.0f;
+					// Shade
+					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm * weight / pdf;
 				}
 			}
 		}
@@ -558,11 +565,12 @@ public:
 			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, shadingData.bsdf->isPureSpecular(), pdf);
 		}
 
-		if (depth <= 0)
-			return scene->background->evaluate(r.dir) * pathThroughput;
+		if (depth == 0)
+			return scene->background->evaluate(r.dir);
 
+		// multiple importance sampling
 		float pdf = scene->background->PDF(shadingData, r.dir);
-		float weight = pdf / (pdf + misPdf);
+		float weight = settings.useMis ? pdf / (pdf + misPdf) : 1.0f;
 		return scene->background->evaluate(r.dir) * pathThroughput * weight / pdf;
 	}
 
@@ -693,7 +701,7 @@ public:
 			variance = (lums.empty()) ? 0.0f : variance / lums.size();
 			float weight = clamp(variance / (variance + mean * mean + EPSILON), EPSILON, 1.0f); // Example weighting formula
 
-			tileSamples[i] = (settings.totalSPP - settings.initSPP) * weight;
+			tileSamples[i] = settings.initSPP + (settings.totalSPP - settings.initSPP) * weight;
 		}
 	}
 
@@ -701,6 +709,8 @@ public:
 	{
 		std::vector<std::vector<std::pair<int, float>>> varLists(numThreads);
 		tileCounter.store(0);
+
+		// calculateTileVariance();
 
 		// calculate variance for each tile
 		for (int i = 0; i < numThreads; i++)

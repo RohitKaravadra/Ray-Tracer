@@ -317,6 +317,8 @@ public:
 	Texture* env;
 	TabulatedDistribution tabDist;
 
+	const bool useTabulated = true;
+
 	EnvironmentMap(Texture* _env)
 	{
 		env = _env;
@@ -342,8 +344,8 @@ public:
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
 	{
-		//return sampleSpherical(shadingData, sampler, reflectedColour, pdf);
-		return sampleTabulated(shadingData, sampler, reflectedColour, pdf);
+		return useTabulated ? sampleTabulated(shadingData, sampler, reflectedColour, pdf) :
+			sampleSpherical(shadingData, sampler, reflectedColour, pdf);
 	}
 
 	Colour evaluate(const Vec3& wi)
@@ -358,7 +360,10 @@ public:
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
-		//return SamplingDistributions::uniformHemispherePDF(wi);
+		if (!useTabulated)
+			return SamplingDistributions::uniformHemispherePDF(wi);
+
+		// sample from tabulated distribution
 		float u = atan2f(wi.z, wi.x);
 		u = (u < 0.0f) ? u + (2.0f * M_PI) : u;
 		u = u / (2.0f * M_PI);
@@ -397,24 +402,31 @@ public:
 	Vec3 samplePositionFromLight(Sampler* sampler, float& pdf)
 	{
 		// Samples a point on the bounding sphere of the scene. Feel free to improve this.
-		//Vec3 p = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
-		Vec3 p = tabDist.sample(sampler);
+		Vec3 p = useTabulated ? tabDist.sample(sampler) :
+			SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
+
 		p = p * use<SceneBounds>().sceneRadius;
 		p = p + use<SceneBounds>().sceneCentre;
 		pdf = 1.0f / (4 * M_PI * SQ(use<SceneBounds>().sceneRadius));
+
 		return p;
 	}
 
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf)
 	{
-		// sample fromtabulated distribution
-		float u, v;
-		Vec3 wi = tabDist.sample(sampler, u, v, pdf);
-		return wi;
-
-		// sample from uniform sphere
-		//Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
-		pdf = SamplingDistributions::cosineHemispherePDF(wi);
-		return wi;
+		if (useTabulated)
+		{
+			// sample from tabulated distribution
+			float u, v;
+			Vec3 wi = tabDist.sample(sampler, u, v, pdf);
+			return wi;
+		}
+		else
+		{
+			// sample from uniform sphere
+			Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
+			pdf = SamplingDistributions::cosineHemispherePDF(wi);
+			return wi;
+		}
 	}
 };

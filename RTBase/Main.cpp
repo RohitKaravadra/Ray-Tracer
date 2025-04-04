@@ -66,13 +66,14 @@ int main(int argc, char* argv[])
 	settings.canHitLight = true;
 	settings.debug = false;
 
-	settings.TileBasedAdaptiveSampling = false;
+	settings.useMis = true;		
+	settings.adaptiveSampling = true;
 	settings.initSPP = 10;
 	settings.totalSPP = 8192;
 
-	settings.numThreads = 10;
+	settings.numThreads = 20;
 	settings.maxBounces = 5;
-	settings.vplRaysPerTile = 2;
+	settings.vplRaysPerTile = 1;
 
 	std::string sceneName = "scenes/" + scenes[sceneNum];
 	std::string filename = "GI.hdr";
