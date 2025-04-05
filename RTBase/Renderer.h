@@ -12,6 +12,8 @@
 #include <functional>
 #include <mutex>
 
+#include "Denoiser.h"
+
 enum DRAWMODE
 {
 	DM_NORMALS,
@@ -157,7 +159,7 @@ public:
 		totalTiles = totalXTiles * totalYTiles;
 
 		// create samples for each tile
-		tileSamples.resize(totalTiles);
+		tileSamples.resize(totalTiles, 1);
 
 		tileCounter.store(0);
 	}
@@ -816,6 +818,46 @@ public:
 		// calculate samples of tiles for adaptive sampling
 		if (film->SPP == settings.initSPP && settings.drawMode != DM_LIGHT_TRACE)
 			calculateTileSamples();
+	}
+
+	AOV createAOV()
+	{
+		AOV aov(canvas->getWidth(), canvas->getHeight());
+		float invTileSize = 1.0f / tileSize;
+
+		for (unsigned int y = 0; y < aov.height; y++)
+		{
+			for (unsigned int x = 0; x < aov.width; x++)
+			{
+				unsigned int index = y * aov.width + x;										// calculate index
+				unsigned int sppIndex = y * invTileSize * totalXTiles + x * invTileSize;	// calculate spp index
+
+				// calculate spp
+				int spp = settings.adaptiveSampling ? min(film->SPP, tileSamples[sppIndex]) : film->SPP;
+
+				// set colour
+				unsigned char r, g, b;
+				film->tonemap(x, y, r, g, b, spp, settings.toneMap);
+				aov.color[index * 3] = (float)r / 255.0f;
+				aov.color[index * 3 + 1] = (float)g / 255.0f;
+				aov.color[index * 3 + 2] = (float)b / 255.0f;
+
+				// create ray
+				float px = x + 0.5f;
+				float py = y + 0.5f;
+				Ray ray = scene->camera.generateRay(px, py);
+
+				// set albedo 
+				Colour col = albedo(ray);
+				memcpy(&aov.albedo[index * 3], &col, sizeof(float) * 3);
+
+				// set normals
+				col = viewNormals(ray);
+				memcpy(&aov.normal[index * 3], &col, sizeof(float) * 3);
+			}
+		}
+
+		return aov;
 	}
 
 	// ##################################################################################################################

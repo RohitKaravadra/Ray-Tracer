@@ -599,11 +599,11 @@ public:
 		float diffPdf = (1.0f - F) * fabsf(wi.z) / M_PI;
 		float specPdf = F * (e + 1.0f) * powf(cosAlpha, e) / (2.0f * M_PI);
 
-		Colour diffCol = col * (1.0f - F) / M_PI;
-		Colour specCol = col * F * (e + 2.0f) * powf(cosAlpha, e) / (2.0f * M_PI);
+		float diff = (1.0f - F) / M_PI;
+		float spec = F * (e + 2.0f) * powf(cosAlpha, e) / (2.0f * M_PI);
 
 		pdf = diffPdf + specPdf;
-		reflectedColour = diffCol + specCol;
+		reflectedColour = col * (diff + spec);
 
 		return shadingData.frame.toWorld(wi);
 	}
@@ -620,10 +620,10 @@ public:
 		Vec3 wr(-localWo.x, -localWo.y, localWo.z);
 		float cosAlpha = std::max(0.0f, wr.dot(localWi));
 
-		Colour diffCol = col * (1.0f - F) / M_PI;
-		Colour specCol = col * F * (e + 2.0f) * powf(cosAlpha, e) / (2.0f * M_PI);
+		float diff = (1.0f - F) / M_PI;
+		float spec = F * (e + 2.0f) * powf(cosAlpha, e) / (2.0f * M_PI);
 
-		return diffCol + specCol;
+		return col * (diff + spec);
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi)

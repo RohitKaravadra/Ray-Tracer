@@ -26,6 +26,21 @@ std::string formatTime(int seconds) {
 	return formattedTime.str();
 }
 
+void debugAov(AOV& aov, Window& canvas)
+{
+	canvas.clear();
+	unsigned int total = canvas.getWidth() * canvas.getHeight();
+	for (unsigned int i = 0; i < total; i++)
+	{
+		unsigned int index = i * 3;
+		canvas.draw(i,
+			(unsigned char)(aov.output[index] * 255.0f),
+			(unsigned char)(aov.output[index + 1] * 255.0f),
+			(unsigned char)(aov.output[index + 2] * 255.0f));
+	}
+	canvas.present();
+}
+
 int main(int argc, char* argv[])
 {
 	// Add call to tests if required
@@ -51,11 +66,15 @@ int main(int argc, char* argv[])
 							"Terrain",			// 16	
 							"veach-bidir",		// 17		
 							"veach-mis",		// 18	
-							"MaterialsScene"	// 19 
+							"MaterialsScene",	// 19
+							"car2",				// 20
+							"materialball",		// 21
+							"teapot-full"		// 22
+							"Sponza",			// 23
 	};
 
 	// Initialize default parameters
-	unsigned int sceneNum = 19;
+	unsigned int sceneNum = 1;
 	bool multiThreaded = true;
 
 	SETTINGS settings;
@@ -66,10 +85,10 @@ int main(int argc, char* argv[])
 	settings.canHitLight = true;
 	settings.debug = false;
 
-	settings.useMis = true;		
-	settings.adaptiveSampling = true;
-	settings.initSPP = 10;
-	settings.totalSPP = 8192;
+	settings.useMis = true;
+	settings.adaptiveSampling = false;
+	settings.initSPP = 5;
+	settings.totalSPP = 5;
 
 	settings.numThreads = 20;
 	settings.maxBounces = 5;
@@ -191,6 +210,15 @@ int main(int argc, char* argv[])
 		if (settings.totalSPP == rt.getSPP())
 		{
 			rt.saveHDR(filename);
+
+			AOV aov = rt.createAOV();
+
+			Denoiser denoiser(aov.width, aov.height);
+			denoiser.denoise(aov);
+
+			debugAov(aov, canvas);
+			int ch = _getch();
+
 			running = false;
 		}
 		canvas.present();
