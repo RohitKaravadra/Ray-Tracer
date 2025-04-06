@@ -180,6 +180,7 @@
     <ClInclude Include="Sampling.h" />
     <ClInclude Include="Scene.h" />
     <ClInclude Include="SceneLoader.h" />
+    <ClInclude Include="Settings.h" />
     <ClInclude Include="stb_image.h" />
     <ClInclude Include="stb_image_write.h" />
   </ItemGroup>

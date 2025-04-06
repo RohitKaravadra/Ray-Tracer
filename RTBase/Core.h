@@ -22,9 +22,15 @@ constexpr const T& clamp(const T& value, const T& low, const T& high)
 class Colour
 {
 public:
-	float r;
-	float g;
-	float b;
+	union
+	{
+		struct
+		{
+			float r, g, b;
+		};
+		float rgb[3];
+	};
+
 	Colour() { r = 0; g = 0; b = 0; }
 	Colour(float _r, float _g, float _b)
 	{
@@ -524,7 +530,8 @@ public:
 		{
 			float l = 1.0f / sqrtf(w.x * w.x + w.z * w.z);
 			u = Vec3(w.z * l, 0.0f, -w.x * l);
-		} else
+		}
+		else
 		{
 			float l = 1.0f / sqrtf(w.y * w.y + w.z * w.z);
 			u = Vec3(0, w.z * l, -w.y * l);

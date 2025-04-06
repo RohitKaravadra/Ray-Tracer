@@ -332,14 +332,8 @@ public:
 		}
 	}
 
-	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, int spp, TONEMAP toneMap = TM_LINEAR)
+	void tonemap(float fr, float fg, float fb, unsigned char& r, unsigned char& g, unsigned char& b, TONEMAP toneMap = TM_LINEAR)
 	{
-		Colour pixel = film[(y * width) + x] / (float)spp;
-
-		float fr = std::max(pixel.r, 0.0f);
-		float fg = std::max(pixel.g, 0.0f);
-		float fb = std::max(pixel.b, 0.0f);
-
 		switch (toneMap)
 		{
 		case TM_NONE:none(fr, fg, fb);
@@ -356,6 +350,17 @@ public:
 		r = std::min(fr, 255.f);
 		g = std::min(fg, 255.f);
 		b = std::min(fb, 255.f);
+	}
+
+	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, int spp, TONEMAP toneMap = TM_LINEAR)
+	{
+		Colour pixel = film[(y * width) + x] / (float)spp;
+
+		float fr = std::max(pixel.r, 0.0f);
+		float fg = std::max(pixel.g, 0.0f);
+		float fb = std::max(pixel.b, 0.0f);
+
+		tonemap(fr, fg, fb, r, g, b, toneMap);
 	}
 
 	std::vector<float> getLums(unsigned int startx, unsigned int starty, unsigned int endx, unsigned int endy)

@@ -13,56 +13,7 @@
 #include <mutex>
 
 #include "Denoiser.h"
-
-enum DRAWMODE
-{
-	DM_NORMALS,
-	DM_ALBEDO,
-	DM_DIRECT,
-	DM_PATH_TRACE,
-	DM_LIGHT_TRACE,
-	DM_INSTANT_RADIOSITY
-};
-
-struct SETTINGS
-{
-	DRAWMODE drawMode;
-	TONEMAP toneMap;
-	IMAGE_FILTER filter;
-
-	bool useMis;					// multiple importance sampling
-	bool adaptiveSampling;			// tile based adaptive sampling
-	bool canHitLight;
-	bool debug;
-
-	unsigned int numThreads;		// number of threads for multithreading
-	unsigned int maxBounces;		// max number of bounces for path tracing
-
-	unsigned int initSPP;			// initial samples per pixel
-	unsigned int totalSPP;			// total samples per pixel
-
-	unsigned int vplRaysPerTile;	// number of rays per tile for VPLs
-
-	SETTINGS()
-	{
-		drawMode = DM_NORMALS;
-		toneMap = TM_NONE;
-		filter = FT_BOX;
-
-		useMis = false;
-		adaptiveSampling = false;
-		canHitLight = false;
-		debug = false;
-
-		numThreads = 3;
-		maxBounces = 5;
-
-		initSPP = 10;
-		totalSPP = 8192;
-
-		vplRaysPerTile = 1;
-	}
-};
+#include "Settings.h"
 
 // vertual point light
 struct VPL
@@ -129,8 +80,8 @@ public:
 		numProcs = sysInfo.dwNumberOfProcessors;
 
 		// only use adaptive sampling for path tracing
-		settings.adaptiveSampling = settings.adaptiveSampling && settings.drawMode == DM_PATH_TRACE;
-		if (!settings.adaptiveSampling)
+		settings.adaptiveSampling = settings.adaptiveSampling && settings.algorithm == AL_PATH_TRACE;
+		if (!(settings.adaptiveSampling && settings.useMultithreading))
 			settings.initSPP = settings.totalSPP;
 
 		setMultithreading(settings.numThreads);
@@ -297,7 +248,7 @@ public:
 	float radiosityDebug(const Vec3& p, float& i)
 	{
 		const float rSq = SQ(0.03f);
-		for (auto vpl : vpls)
+		for (const VPL& vpl : vpls)
 		{
 			float lSq = (vpl.shadingData.x - p).lengthSq();
 			if (lSq < rSq)
@@ -481,7 +432,6 @@ public:
 		Colour emitted;
 		Vec3 p = light->sample(shadingData, sampler, emitted, pdf);
 
-
 		pdf *= pmf;
 		if (light->isArea())
 		{
@@ -529,7 +479,7 @@ public:
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
 
-		//return scene->background->evaluate(r.dir);
+		//return Colour(1, 1, 1) * scene->background->PDF(shadingData, r.dir);
 
 		if (shadingData.t < FLT_MAX)
 		{
@@ -628,47 +578,62 @@ public:
 	void render()
 	{
 		film->incrementSPP();
-		if (settings.drawMode == DM_INSTANT_RADIOSITY)
+
+		if (settings.algorithm == AL_INSTANT_RADIOSITY && settings.drawMode == DM_ALGORITHM)
 			radiosityVplPass();
-		else
+
+		for (unsigned int y = 0; y < film->height; y++)
 		{
-			for (unsigned int y = 0; y < film->height; y++)
+			for (unsigned int x = 0; x < film->width; x++)
 			{
-				for (unsigned int x = 0; x < film->width; x++)
+				if (settings.drawMode != DM_ALGORITHM)
 				{
-					if (settings.drawMode == DM_LIGHT_TRACE)
+					float px = x + 0.5f;
+					float py = y + 0.5f;
+					Ray ray = scene->camera.generateRay(px, py);
+
+					Colour col;
+					switch (settings.drawMode)
+					{
+					case DM_ALBEDO:
+						col = albedo(ray);
+						break;
+					case DM_NORMALS:
+						col = viewNormals(ray);
+						break;
+					case DM_DIRECT:
+						col = direct(ray, samplers[0]);
+						break;
+					}
+
+					film->splat(px, py, col);
+				}
+				else
+				{
+					if (settings.algorithm == AL_LIGHT_TRACE)
 					{
 						lightTrace(samplers[0]);
+						continue;
 					}
 					else
 					{
-						float px = x + (settings.drawMode == DM_PATH_TRACE ? samplers[0]->next() : 0.5f);
-						float py = y + (settings.drawMode == DM_PATH_TRACE ? samplers[0]->next() : 0.5f);
+						float px = x + samplers[0]->next();
+						float py = y + samplers[0]->next();
 						Ray ray = scene->camera.generateRay(px, py);
 
 						Colour col;
-						switch (settings.drawMode)
+
+						switch (settings.algorithm)
 						{
-						case DM_NORMALS:
-							col = viewNormals(ray);
-							break;
-						case DM_ALBEDO:
-							col = albedo(ray);
-							break;
-						case DM_DIRECT:
-							col = direct(ray, samplers[0]);
-							break;
-						case DM_PATH_TRACE:
+						case AL_PATH_TRACE:
 							col = pathTrace(ray, samplers[0]);
 							break;
+						case AL_INSTANT_RADIOSITY:
+							col = radiosityLightPass(ray, samplers[0]);
 						}
 
 						film->splat(px, py, col);
 					}
-
-					unsigned char r, g, b;
-					film->tonemap(x, y, r, g, b, settings.toneMap);
-					canvas->draw(x, y, r, g, b);
 				}
 			}
 		}
@@ -676,10 +641,9 @@ public:
 
 	// TILE BASED ADAPTIVE SAMPLING ########################################################################################
 
-	void calculateTileVariance()
+	void calculateTileSamples()
 	{
-		unsigned int i;
-		while ((i = tileCounter.fetch_add(1)) < totalTiles)
+		for (unsigned int i = 0; i < totalTiles; i++)
 		{
 			unsigned int startx = (i % totalXTiles) * tileSize;
 			unsigned int starty = (i / totalXTiles) * tileSize;
@@ -703,25 +667,7 @@ public:
 			variance = (lums.empty()) ? 0.0f : variance / lums.size();
 			float weight = clamp(variance / (variance + mean * mean + EPSILON), EPSILON, 1.0f); // Example weighting formula
 
-			tileSamples[i] = settings.initSPP + (settings.totalSPP - settings.initSPP) * weight;
-		}
-	}
-
-	void calculateTileSamples()
-	{
-		std::vector<std::vector<std::pair<int, float>>> varLists(numThreads);
-		tileCounter.store(0);
-
-		// calculateTileVariance();
-
-		// calculate variance for each tile
-		for (int i = 0; i < numThreads; i++)
-			threads[i] = new std::thread(&RayTracer::calculateTileVariance, this);
-
-		for (int i = 0; i < numThreads; i++)
-		{
-			threads[i]->join();
-			delete threads[i];
+			tileSamples[i] = (unsigned int)(film->SPP + (settings.totalSPP - film->SPP) * weight);
 		}
 	}
 
@@ -734,6 +680,13 @@ public:
 		unsigned int i;
 		while ((i = tileCounter.fetch_add(1)) < totalTiles)
 		{
+			bool isTileRendered = film->SPP > settings.initSPP &&
+				film->SPP > tileSamples[i] &&
+				settings.algorithm != AL_LIGHT_TRACE;
+
+			if (isTileRendered)
+				continue;
+
 			unsigned int startx = (i % totalXTiles) * tileSize;
 			unsigned int starty = (i / totalXTiles) * tileSize;
 
@@ -744,46 +697,55 @@ public:
 			{
 				for (unsigned int x = startx; x < endx; x++)
 				{
-					unsigned int spp = film->SPP;
-
-					if (settings.drawMode == DM_LIGHT_TRACE)
+					if (settings.drawMode != DM_ALGORITHM)
 					{
-						lightTrace(samplers[id]);
-					}
-					else if (film->SPP <= settings.initSPP || film->SPP < tileSamples[i])
-					{
-						// only calculate if enought samples are not calculated
-						float px = x + (settings.drawMode == DM_PATH_TRACE ? samplers[id]->next() : 0.5f);
-						float py = y + (settings.drawMode == DM_PATH_TRACE ? samplers[id]->next() : 0.5f);
+						float px = x + 0.5f;
+						float py = y + 0.5f;
 						Ray ray = scene->camera.generateRay(px, py);
 
 						Colour col;
 						switch (settings.drawMode)
 						{
-						case DM_NORMALS:
-							col = viewNormals(ray);
-							break;
 						case DM_ALBEDO:
 							col = albedo(ray);
+							break;
+						case DM_NORMALS:
+							col = viewNormals(ray);
 							break;
 						case DM_DIRECT:
 							col = direct(ray, samplers[id]);
 							break;
-						case DM_PATH_TRACE:
-							col = pathTrace(ray, samplers[id]);
-							break;
-						case DM_INSTANT_RADIOSITY:
-							col = radiosityLightPass(ray, samplers[id]);
 						}
+
 						film->splat(px, py, col);
 					}
 					else
-						spp = tileSamples[i];
+					{
+						if (settings.algorithm == AL_LIGHT_TRACE)
+						{
+							lightTrace(samplers[id]);
+							continue;
+						}
+						else
+						{
+							float px = x + samplers[id]->next();
+							float py = y + samplers[id]->next();
+							Ray ray = scene->camera.generateRay(px, py);
 
-					// tonemap and draw pixel
-					unsigned char r, g, b;
-					film->tonemap(x, y, r, g, b, spp, settings.toneMap);
-					canvas->draw(x, y, r, g, b);
+							Colour col;
+
+							switch (settings.algorithm)
+							{
+							case AL_PATH_TRACE:
+								col = pathTrace(ray, samplers[id]);
+								break;
+							case AL_INSTANT_RADIOSITY:
+								col = radiosityLightPass(ray, samplers[id]);
+							}
+
+							film->splat(px, py, col);
+						}
+					}
 				}
 			}
 		}
@@ -802,7 +764,7 @@ public:
 		tileCounter.store(0);
 
 		// check for radiosity vpl pass
-		if (settings.drawMode == DM_INSTANT_RADIOSITY)
+		if (settings.algorithm == AL_INSTANT_RADIOSITY && settings.drawMode == DM_ALGORITHM)
 			radiosityVplPass();
 
 		// process all tiles
@@ -816,31 +778,31 @@ public:
 		}
 
 		// calculate samples of tiles for adaptive sampling
-		if (film->SPP == settings.initSPP && settings.drawMode != DM_LIGHT_TRACE)
+		if (film->SPP == settings.initSPP && settings.algorithm != AL_LIGHT_TRACE)
 			calculateTileSamples();
 	}
 
-	AOV createAOV()
-	{
-		AOV aov(canvas->getWidth(), canvas->getHeight());
-		float invTileSize = 1.0f / tileSize;
+	// ##################################################################################################################
 
+	void createAOV(AOV& aov)
+	{
+		aov = AOV(film->width, film->height);
+
+		int sppY, spp, sppIndex;
 		for (unsigned int y = 0; y < aov.height; y++)
 		{
+			sppY = (y / tileSize) * totalXTiles;
 			for (unsigned int x = 0; x < aov.width; x++)
 			{
-				unsigned int index = y * aov.width + x;										// calculate index
-				unsigned int sppIndex = y * invTileSize * totalXTiles + x * invTileSize;	// calculate spp index
+				// calculate index
+				unsigned int index = y * aov.width + x;
 
-				// calculate spp
-				int spp = settings.adaptiveSampling ? min(film->SPP, tileSamples[sppIndex]) : film->SPP;
+				sppIndex = sppY + x / tileSize;
+				spp = settings.adaptiveSampling && settings.initSPP < film->SPP ? min(tileSamples[sppIndex], film->SPP) : film->SPP;
 
 				// set colour
-				unsigned char r, g, b;
-				film->tonemap(x, y, r, g, b, spp, settings.toneMap);
-				aov.color[index * 3] = (float)r / 255.0f;
-				aov.color[index * 3 + 1] = (float)g / 255.0f;
-				aov.color[index * 3 + 2] = (float)b / 255.0f;
+				Colour col = film->film[index] / (float)spp;
+				memcpy(&aov.color[index * 3], &col.rgb, sizeof(float) * 3);
 
 				// create ray
 				float px = x + 0.5f;
@@ -848,19 +810,49 @@ public:
 				Ray ray = scene->camera.generateRay(px, py);
 
 				// set albedo 
-				Colour col = albedo(ray);
-				memcpy(&aov.albedo[index * 3], &col, sizeof(float) * 3);
+				col = albedo(ray);
+				memcpy(&aov.albedo[index * 3], &col.rgb, sizeof(float) * 3);
 
 				// set normals
 				col = viewNormals(ray);
-				memcpy(&aov.normal[index * 3], &col, sizeof(float) * 3);
+				memcpy(&aov.normal[index * 3], &col.rgb, sizeof(float) * 3);
 			}
 		}
-
-		return aov;
 	}
 
-	// ##################################################################################################################
+	void draw()
+	{
+		unsigned char r, g, b;
+		int sppY, spp, sppIndex;
+		for (unsigned int y = 0; y < film->height; y++)
+		{
+			sppY = (y / tileSize) * totalXTiles;
+			for (unsigned int x = 0; x < film->width; x++)
+			{
+				sppIndex = sppY + x / tileSize;
+				spp = settings.adaptiveSampling && settings.initSPP < film->SPP ? min(tileSamples[sppIndex], film->SPP) : film->SPP;
+				film->tonemap(x, y, r, g, b, spp, settings.toneMap);
+				canvas->draw(y * film->width + x, r, g, b);
+			}
+		}
+	}
+
+	void draw(const AOV& aov)
+	{
+		Colour col;
+		unsigned char r, g, b;
+		unsigned int index, total = film->height * film->width;
+
+		for (unsigned int i = 0; i < total; i++)
+		{
+			index = i * 3;
+			film->tonemap(aov.output[index],
+				aov.output[index + 1],
+				aov.output[index + 2],
+				r, g, b, settings.toneMap);
+			canvas->draw(i, r, g, b);
+		}
+	}
 
 	int getSPP() const
 	{

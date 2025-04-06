@@ -13,36 +13,25 @@
 // Arbitrary Output Variable
 struct AOV
 {
-	float* albedo;
-	float* normal;
-	float* color;
-	float* output;
+	std::vector<float> albedo;
+	std::vector<float> normal;
+	std::vector<float> color;
+	std::vector<float> output;
 
 	unsigned int width;
 	unsigned int height;
+
+	AOV() = default;
 
 	AOV(unsigned int _width, unsigned int _height)
 	{
 		width = _width;
 		height = _height;
 
-		albedo = new float[width * height * 3];
-		normal = new float[width * height * 3];
-		color = new float[width * height * 3];
-		output = new float[width * height * 3];
-
-		memset(albedo, 0, width * height * 3 * sizeof(float));
-		memset(normal, 0, width * height * 3 * sizeof(float));
-		memset(color, 0, width * height * 3 * sizeof(float));
-		memset(output, 0, width * height * 3 * sizeof(float));
-	}
-
-	~AOV()
-	{
-		delete[] albedo;
-		delete[] normal;
-		delete[] color;
-		delete[] output;
+		albedo.resize(width * height * 3, 0);
+		normal.resize(width * height * 3, 0);
+		color.resize(width * height * 3, 0);
+		output.resize(width * height * 3, 0);
 	}
 };
 
@@ -133,9 +122,9 @@ public:
 			std::cout << ANSI_COLOR_YELLOW << "Starting denoising..." << ANSI_COLOR_RESET << std::endl;
 
 			// Copy data to buffers
-			oidnWriteBuffer(colorBuf, 0, dataSize, aov.color);
-			oidnWriteBuffer(albedoBuf, 0, dataSize, aov.albedo);
-			oidnWriteBuffer(normalBuf, 0, dataSize, aov.normal);
+			oidnWriteBuffer(colorBuf, 0, dataSize, &aov.color[0]);
+			oidnWriteBuffer(albedoBuf, 0, dataSize, &aov.albedo[0]);
+			oidnWriteBuffer(normalBuf, 0, dataSize, &aov.normal[0]);
 
 			// Set filter images (using non-shared version for safety)
 			oidnSetFilterImage(filter, "color", colorBuf, OIDN_FORMAT_FLOAT3, width, height, 0, 0, 0);
@@ -158,7 +147,7 @@ public:
 			}
 
 			// Copy results back
-			oidnReadBuffer(outputBuf, 0, dataSize, aov.output);
+			oidnReadBuffer(outputBuf, 0, dataSize, &aov.output[0]);
 
 			std::cout << ANSI_COLOR_GREEN << "Denoising completed successfully" << ANSI_COLOR_RESET << std::endl;
 		}
