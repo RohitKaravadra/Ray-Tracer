@@ -35,32 +35,43 @@ struct AOV
 	}
 };
 
-class Denoiser {
+// Denoiser class using OpenImageDenoise (OIDN)
+class Denoiser
+{
+	// OIDN device and filter handles
 	OIDNDevice device = nullptr;
 	OIDNFilter filter = nullptr;
 
+	// Buffers for color, albedo, normal, and output
 	OIDNBuffer colorBuf = nullptr;
 	OIDNBuffer albedoBuf = nullptr;
 	OIDNBuffer normalBuf = nullptr;
 	OIDNBuffer outputBuf = nullptr;
 
+	// Image dimensions and data size
 	unsigned int width = 0;
 	unsigned int height = 0;
-	size_t dataSize = 0;
-	bool initialized = false;
 
-	void initializeBuffers() {
+	size_t dataSize = 0;
+	bool initialized = false;	// Flag to check if OIDN is initialized
+
+	// Initialize OIDN buffers
+	void initializeBuffers()
+	{
 		colorBuf = oidnNewBuffer(device, dataSize);
 		albedoBuf = oidnNewBuffer(device, dataSize);
 		normalBuf = oidnNewBuffer(device, dataSize);
 		outputBuf = oidnNewBuffer(device, dataSize);
 
-		if (!colorBuf || !albedoBuf || !normalBuf || !outputBuf) {
+		if (!colorBuf || !albedoBuf || !normalBuf || !outputBuf)
+		{
 			throw std::runtime_error("Failed to create OIDN buffers");
 		}
 	}
 
-	void cleanup() {
+	// Cleanup function to release OIDN resources
+	void cleanup()
+	{
 		if (filter) oidnReleaseFilter(filter);
 		if (device) oidnReleaseDevice(device);
 		if (colorBuf) oidnReleaseBuffer(colorBuf);
@@ -88,23 +99,29 @@ public:
 		height = _height;
 		dataSize = width * height * 3 * sizeof(float);
 
-		try {
+		try
+		{
 			std::cout << "Initializing OIDN..." << std::endl;
 
+			// Create OIDN device
 			device = oidnNewDevice(OIDN_DEVICE_TYPE_DEFAULT);
 			if (!device) throw std::runtime_error("Failed to create OIDN device");
 
+			// Set device parameters
 			oidnCommitDevice(device);
 
+			// Create OIDN filter
 			filter = oidnNewFilter(device, "RT");
 			if (!filter) throw std::runtime_error("Failed to create OIDN filter");
 
+			// Set filter parameters
 			initializeBuffers();
 
 			initialized = true;
 			std::cout << ANSI_COLOR_GREEN << "OIDN initialized successfully" << ANSI_COLOR_RESET << std::endl;
 		}
-		catch (const std::exception& e) {
+		catch (const std::exception& e)
+		{
 			std::cerr << ANSI_COLOR_RED << "ERROR: " << e.what() << ANSI_COLOR_RESET << std::endl;
 			cleanup();
 			throw;
@@ -113,12 +130,15 @@ public:
 
 	void denoise(AOV& aov)
 	{
-		if (!initialized) {
+		// Check if OIDN is initialized
+		if (!initialized) 
+		{
 			std::cerr << ANSI_COLOR_RED << "ERROR: Denoiser not initialized" << ANSI_COLOR_RESET << std::endl;
 			return;
 		}
 
-		try {
+		try 
+		{
 			std::cout << ANSI_COLOR_YELLOW << "Starting denoising..." << ANSI_COLOR_RESET << std::endl;
 
 			// Copy data to buffers
@@ -157,7 +177,8 @@ public:
 		}
 	}
 
-	~Denoiser() {
+	~Denoiser() 
+	{
 		cleanup();
 	}
 };

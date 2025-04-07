@@ -73,6 +73,7 @@ public:
 		Colour cos2Theta = Colour(1.0f, 1.0f, 1.0f) * cosTheta * cosTheta;
 		Colour sin2Theta = Colour(1.0f, 1.0f, 1.0f) * (1.0f - cosTheta * cosTheta);
 
+		// Compute the parallel and perpendicular Fresnel reflection coefficients
 		Colour fParl = (eta2k2 * cos2Theta - ior * 2 * cosTheta + sin2Theta) /
 			(eta2k2 * cos2Theta + ior * 2 * cosTheta + sin2Theta);
 		Colour fPerp = (eta2k2 - ior * 2 * cosTheta + cos2Theta) /
@@ -84,6 +85,7 @@ public:
 
 	static float lambdaGGX(Vec3 wi, float alpha)
 	{
+		// Compute the lambda value for GGX microfacet distribution
 		float cosTheta = fabsf(wi.z);
 		float cos2Theta = cosTheta * cosTheta;
 		float tan2Theta = (1.0f - cos2Theta) / cos2Theta;
@@ -93,6 +95,7 @@ public:
 
 	static float Gggx(Vec3 wi, Vec3 wo, float alpha)
 	{
+		// Compute the G term for GGX microfacet distribution
 		float g1Wi = 1.0f / (1.0f + lambdaGGX(wi, alpha));
 		float g1Wo = 1.0f / (1.0f + lambdaGGX(wo, alpha));
 		return g1Wi * g1Wo;
@@ -100,6 +103,7 @@ public:
 
 	static float Dggx(Vec3 h, float alpha)
 	{
+		// Compute the D term for GGX microfacet distribution
 		float cos2Theta = h.z * h.z;
 		float alpha2 = alpha * alpha;
 		float denom = cos2Theta * (alpha2 - 1.0f) + 1.0f;
@@ -193,8 +197,10 @@ public:
 		// reflected direction
 		Vec3 wi(-localWo.x, -localWo.y, localWo.z);
 
+		// Compute Fresnel reflection coefficient
 		Colour F = ShadingHelper::fresnelConductor(fabs(localWo.z), eta, k);
 
+		// sample albedo
 		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * F / fabs(wi.z);
 		pdf = 1.0f;
 
@@ -246,9 +252,12 @@ public:
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 
+		// sample albedo
 		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv);
 
 		Vec3 wi;
+
+		// treat as mirror
 		if (alpha < EPSILON)
 		{
 			// reflected direction
@@ -260,6 +269,8 @@ public:
 		}
 		else
 		{
+			// microfacet sampling
+			// sample the microfacet normal
 			float r1 = sampler->next();
 			float r2 = sampler->next();
 
@@ -267,16 +278,19 @@ public:
 			float sinTheta = sqrtf(1.0f - cosTheta * cosTheta);
 			float phi = 2 * M_PI * r2;
 
-			Vec3 wm(sinTheta * cosf(phi), sinTheta * sinf(phi), cosTheta);
+			Vec3 wm(sinTheta * cosf(phi), sinTheta * sinf(phi), cosTheta);			// microfacet normal
 
-			wi = (-localWo + wm * Dot(localWo, wm) * 2.0f).normalize();
+			wi = (-localWo + wm * Dot(localWo, wm) * 2.0f).normalize();				// reflected direction
 
-			float ggx = ShadingHelper::Gggx(wi, localWo, alpha);
-			float D = ShadingHelper::Dggx(wm, alpha);
+			float ggx = ShadingHelper::Gggx(wi, localWo, alpha);					// shadowing term
+			float D = ShadingHelper::Dggx(wm, alpha);								// distribution term
 
-			Colour F = ShadingHelper::fresnelConductor(fabsf(wi.dot(wm)), eta, k);
+			Colour F = ShadingHelper::fresnelConductor(fabsf(wi.dot(wm)), eta, k);	// Fresnel term
 
+			// compute the reflected colour
 			reflectedColour = reflectedColour * F * ggx * D / (4 * fabs(localWo.z) * fabs(wi.z));
+
+			// compute the PDF
 			pdf = D * fabsf(cosTheta / (4 * Dot(localWo, wm)));
 		}
 
@@ -289,16 +303,17 @@ public:
 		if (alpha < EPSILON)
 			return albedo->sample(shadingData.tu, shadingData.tv) / fabsf(shadingData.frame.toLocal(wi).z);
 
-		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
-		Vec3 localWi = shadingData.frame.toLocal(wi);
+		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);	// outgoing direction
+		Vec3 localWi = shadingData.frame.toLocal(wi);				// incoming direction
 
-		Vec3 wm = (localWo + localWi).normalize();
+		Vec3 wm = (localWo + localWi).normalize();					// microfacet normal
 
-		Colour F = ShadingHelper::fresnelConductor(fabsf(localWi.dot(wm)), eta, k);
+		Colour F = ShadingHelper::fresnelConductor(fabsf(localWi.dot(wm)), eta, k);		// Fresnel term
 
-		float D = ShadingHelper::Dggx(wm, alpha);
-		float ggx = ShadingHelper::Gggx(localWi, localWo, alpha);
+		float D = ShadingHelper::Dggx(wm, alpha);					// distribution term
+		float ggx = ShadingHelper::Gggx(localWi, localWo, alpha);	// shadowing term
 
+		// compute the reflected colour
 		return albedo->sample(shadingData.tu, shadingData.tv) * F * D * ggx / (4.0f * fabsf(localWo.z) * fabsf(localWi.z));
 	}
 
@@ -577,9 +592,9 @@ public:
 
 		Vec3 wi, wr(-localWo.x, -localWo.y, localWo.z);
 
-		float F = ShadingHelper::fresnelDielectric(std::abs(localWo.z), eta);
+		float F = ShadingHelper::fresnelDielectric(std::abs(localWo.z), eta);	// Fresnel term
 
-		if (sampler->next() < F)
+		if (sampler->next() < F)	// Phong reflection
 		{
 			float cosTheta = powf(sampler->next(), 1.0f / (e + 1.0f));
 			float sinTheta = sqrtf(1.0f - cosTheta * cosTheta);
@@ -591,14 +606,16 @@ public:
 
 			wi = frame.toWorld(wl);
 		}
-		else
+		else						// Lambertian reflection
 			wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
 
 		float cosAlpha = std::max(0.0f, wr.dot(wi));
 
+		// compute the PDF
 		float diffPdf = (1.0f - F) * fabsf(wi.z) / M_PI;
 		float specPdf = F * (e + 1.0f) * powf(cosAlpha, e) / (2.0f * M_PI);
 
+		// diffuse and specular components
 		float diff = (1.0f - F) / M_PI;
 		float spec = F * (e + 2.0f) * powf(cosAlpha, e) / (2.0f * M_PI);
 

@@ -12,6 +12,7 @@
 
 constexpr float texelScale = 1.0f / 255.0f;
 
+// Constants for Filmic tonemap
 enum IMAGE_FILTER
 {
 	FT_BOX,
@@ -220,6 +221,7 @@ public:
 	}
 };
 
+// Tonemapping functions
 enum TONEMAP
 {
 	TM_NONE,
@@ -238,6 +240,7 @@ class Film
 		b *= 255;
 	}
 
+	// Linear tonemap
 	void liner(float& r, float& g, float& b)
 	{
 		r = powf(std::max(r, 0.0f), inv2p2) * 255;
@@ -245,6 +248,7 @@ class Film
 		b = powf(std::max(b, 0.0f), inv2p2) * 255;
 	}
 
+	// Linear tonemap with exposure
 	void linerWithExposure(float& r, float& g, float& b, float exposure = 1.0f)
 	{
 		const float e = std::pow(2.0f, exposure * inv2p2);
@@ -253,6 +257,7 @@ class Film
 		b = powf(std::max(b, 0.0f), inv2p2) * e * 255;
 	}
 
+	// Reinhard global tonemap
 	void ReinhardGlobal(float& r, float& g, float& b)
 	{
 		r = powf(std::max(r / (1.0f + r), 0.0f), inv2p2) * 255;
@@ -265,6 +270,7 @@ class Film
 		return std::fabs((x * (A * x + CB) + DE) / (x * (A * x + B) + DF) - EbF);
 	}
 
+	// Filmic tonemap
 	void filmic(float& r, float& g, float& b)
 	{
 		r = CX(r) * invCW * 255.0f;
@@ -272,6 +278,7 @@ class Film
 		b = CX(b) * invCW * 255.0f;
 	}
 
+	// Set the filter to be used
 	void setFilter(IMAGE_FILTER _filter)
 	{
 		if (filter != nullptr)
@@ -332,6 +339,7 @@ public:
 		}
 	}
 
+	// Tonemap the pixel
 	void tonemap(float fr, float fg, float fb, unsigned char& r, unsigned char& g, unsigned char& b, TONEMAP toneMap = TM_LINEAR)
 	{
 		switch (toneMap)
@@ -352,6 +360,7 @@ public:
 		b = std::min(fb, 255.f);
 	}
 
+	// Tonemap the pixel
 	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, int spp, TONEMAP toneMap = TM_LINEAR)
 	{
 		Colour pixel = film[(y * width) + x] / (float)spp;
@@ -363,6 +372,7 @@ public:
 		tonemap(fr, fg, fb, r, g, b, toneMap);
 	}
 
+	// Get the luminance of a pixels from the film with the given coordinates
 	std::vector<float> getLums(unsigned int startx, unsigned int starty, unsigned int endx, unsigned int endy)
 	{
 		std::vector<float> lums;

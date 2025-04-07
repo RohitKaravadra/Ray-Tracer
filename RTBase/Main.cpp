@@ -7,6 +7,7 @@
 #include "GamesEngineeringBase.h"
 #include <unordered_map>
 
+// create settings
 SETTINGS createSettings()
 {
 	SETTINGS settings;
@@ -25,7 +26,7 @@ SETTINGS createSettings()
 
 	settings.adaptiveSampling = true;
 	settings.initSPP = 10;
-	settings.totalSPP = 200;
+	settings.totalSPP = 500;
 
 	settings.numThreads = 20;
 	settings.maxBounces = 5;
@@ -62,7 +63,10 @@ const std::string scenes[] = { "scenes/cornell-box",		// 0
 };
 
 // current scene number
+// change this to render different scenes
 const unsigned int sceneNum = 0;
+
+
 
 int main(int argc, char* argv[])
 {
@@ -123,14 +127,14 @@ int main(int argc, char* argv[])
 
 	// Create ray tracer
 	RayTracer rt;
-	rt.init(scene, &canvas, settings);	// 10 threads
+	rt.init(scene, &canvas, settings);
 
 	// Create timer
 	GamesEngineeringBase::Timer timer;
 	float totalTime = 0;
 
 	bool running = true;
-	bool completed = false;
+	bool completed = false;	// to check if the render is completed
 	AOV aov;
 
 	std::cout << "\n\n\n\n\n";
@@ -153,7 +157,7 @@ int main(int argc, char* argv[])
 			if (completed)
 			{
 				std::cout << "\n\n\n\n\n";
-				completed = false;
+				completed = false;	// reset completed flag
 			}
 		}
 
@@ -174,6 +178,7 @@ int main(int argc, char* argv[])
 			totalTime += t; // update total time
 
 			float progress = rt.getSPP() * 100 / settings.totalSPP;
+
 			// Write stats to console
 			std::cout << "\033[F\033[F\033[F\033[F\033[F";
 			std::cout << "Progress   : " << progress << "%              \n";
@@ -199,6 +204,7 @@ int main(int argc, char* argv[])
 		{
 			completed = true;
 
+			// denoising
 			rt.saveHDR(filename);
 			if (settings.denoise)
 			{
@@ -208,6 +214,7 @@ int main(int argc, char* argv[])
 			}
 		}
 
+		// draw the image
 		if (completed && settings.denoise)
 			rt.draw(aov);
 		else

@@ -289,6 +289,7 @@ struct IntersectionData
 
 class BVHTree
 {
+	// bvh node structure
 	struct Node
 	{
 		AABB bounds;
@@ -322,6 +323,7 @@ class BVHTree
 
 			float triCenter = triangles[index].centre.coords[axis];
 
+			// check for left or right child and update bounds
 			if (triCenter < splitPos)
 			{
 				boundA.extend(triangles[index].maxP);

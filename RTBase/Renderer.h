@@ -28,22 +28,21 @@ public:
 	Scene* scene;
 	GamesEngineeringBase::Window* canvas;
 	Film* film;
-	MTRandom** samplers;
-	std::thread** threads;
-	int numProcs;
-	unsigned int numThreads;
+	MTRandom** samplers;					// samplers for multithreading
+	std::thread** threads;					// threads for multithreading
+	int numProcs;							// number of processors
+	unsigned int numThreads;				// number of threads
 
-	unsigned int totalTiles;
-	unsigned int totalXTiles;
-	const unsigned int tileSize = 16;
+	unsigned int totalTiles;				// number of tiles
+	unsigned int totalXTiles;				// number of tiles in x direction	
+	const unsigned int tileSize = 16;		// size of each tile
 
-	std::atomic<unsigned int> tileCounter;
-	std::vector<unsigned int> tileSamples;
+	std::atomic<unsigned int> tileCounter;	// number of tiles processed
+	std::vector<unsigned int> tileSamples;	// number of samples per tile
 
-	std::vector<VPL> vpls;
-	std::mutex vplMtx;
+	std::vector<VPL> vpls;					// list of VPLs
 
-	SETTINGS settings;
+	SETTINGS settings;						// settings for the ray tracer
 
 	~RayTracer()
 	{

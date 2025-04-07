@@ -74,7 +74,7 @@ public:
 
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf)
 	{
-		// Add code to sample a direction from the light
+		// sample from cosine hemisphere
 		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
 		pdf = SamplingDistributions::cosineHemispherePDF(wi);
 		Frame frame;
@@ -134,7 +134,7 @@ public:
 	}
 };
 
-
+// TabulatedDistribution is used to store the luminance values of the environment map
 class TabulatedDistribution
 {
 public:
@@ -146,9 +146,10 @@ public:
 
 	float totalLum;
 	float avgLum;
+
 	std::vector<float> lum;
-	std::vector<float> cdfRows;
-	std::vector<std::vector<float>> cdfCols;
+	std::vector<float> cdfRows;					// marginal PDF
+	std::vector<std::vector<float>> cdfCols;	// conditional PDF
 
 	void clear()
 	{
@@ -307,7 +308,7 @@ class EnvironmentMap : public Light
 {
 public:
 	Texture* env;
-	TabulatedDistribution tabDist;
+	TabulatedDistribution tabDist;	// tabulated distribution for importance sampling
 
 	const bool useTabulated = true;
 
