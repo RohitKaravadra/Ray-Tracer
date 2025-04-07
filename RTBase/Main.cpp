@@ -24,7 +24,7 @@ SETTINGS createSettings()
 	settings.useMis = true;
 
 	settings.adaptiveSampling = true;
-	settings.initSPP = 20;
+	settings.initSPP = 10;
 	settings.totalSPP = 200;
 
 	settings.numThreads = 20;
@@ -62,7 +62,7 @@ const std::string scenes[] = { "scenes/cornell-box",		// 0
 };
 
 // current scene number
-const unsigned int sceneNum = 19;
+const unsigned int sceneNum = 0;
 
 int main(int argc, char* argv[])
 {
@@ -133,7 +133,7 @@ int main(int argc, char* argv[])
 	bool completed = false;
 	AOV aov;
 
-	std::cout << "\n\n\n\n";
+	std::cout << "\n\n\n\n\n";
 	while (running)
 	{
 		canvas.checkInput(); // Check for input
@@ -152,7 +152,7 @@ int main(int argc, char* argv[])
 			totalTime = 0;
 			if (completed)
 			{
-				std::cout << "\n\n\n\n";
+				std::cout << "\n\n\n\n\n";
 				completed = false;
 			}
 		}
@@ -173,8 +173,10 @@ int main(int argc, char* argv[])
 
 			totalTime += t; // update total time
 
+			float progress = rt.getSPP() * 100 / settings.totalSPP;
 			// Write stats to console
-			std::cout << "\033[F\033[F\033[F\033[F";
+			std::cout << "\033[F\033[F\033[F\033[F\033[F";
+			std::cout << "Progress   : " << progress << "%              \n";
 			std::cout << "Samples    : " << rt.getSPP() << "            \n";
 			std::cout << "Time       : " << t << "                      \n";
 			std::cout << "FPS        : " << (t > 0 ? 1.0f / t : FLT_MAX) << "              \n";

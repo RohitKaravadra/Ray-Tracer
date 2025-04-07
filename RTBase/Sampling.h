@@ -34,45 +34,40 @@ class SamplingDistributions
 public:
 	static Vec3 uniformSampleHemisphere(float r1, float r2)
 	{
-		float theta = acosf(r1);
-		float phi = M_PI * 2 * r2;
-		float st = sinf(theta);
-		return Vec3(st * cosf(phi), st * sinf(phi), r1);
+		float cosTheta = r1;
+		float sinTheta = sqrtf(1.0f - cosTheta * cosTheta);
+		float phi = 2.0f * M_PI * r2;
+		return Vec3(sinTheta * cosf(phi), sinTheta * sinf(phi), cosTheta);
 	}
 
-	static float uniformHemispherePDF(const Vec3 wi)
+	static float uniformHemispherePDF(const Vec3& wi)
 	{
-		// Add code here
-		return 1.0f / (2 * M_PI);
+		return fabsf(wi.z) / (2.0f * M_PI);
 	}
 
 	static Vec3 cosineSampleHemisphere(float r1, float r2)
 	{
-		r1 = sqrtf(r1);
-		float theta = acosf(r1);
-		float phi = M_PI * 2 * r2;
-		float st = sinf(theta);
-		return Vec3(st * cosf(phi), st * sinf(phi), r1);
+		float cosTheta = sqrtf(r1);
+		float sinTheta = sqrtf(1.0f - cosTheta * cosTheta);
+		float phi = 2.0f * M_PI * r2;
+		return Vec3(sinTheta * cosf(phi), sinTheta * sinf(phi), cosTheta);
 	}
 
-	static float cosineHemispherePDF(const Vec3 wi)
+	static float cosineHemispherePDF(const Vec3& wi)
 	{
-		// Add code here
-		return wi.z / M_PI;
+		return fabsf(wi.z) / M_PI;
 	}
 
 	static Vec3 uniformSampleSphere(float r1, float r2)
 	{
-		r1 = 1 - 2 * r1;
-		float theta = acosf(r1);
-		float phi = M_PI * 2 * r2;
-		float st = sinf(theta);
-		return Vec3(st * cosf(phi), st * sinf(phi), r1);
+		float cosTheta = 1.0f - 2.0f * r1;
+		float sinTheta = sqrtf(1.0f - cosTheta * cosTheta);
+		float phi = 2.0f * M_PI * r2;
+		return Vec3(sinTheta * cosf(phi), sinTheta * sinf(phi), cosTheta);
 	}
 
 	static float uniformSpherePDF(const Vec3& wi)
 	{
-		// Add code here
-		return 1.0f / (4 * M_PI);
+		return 1.0f / (4.0f * M_PI);
 	}
 };

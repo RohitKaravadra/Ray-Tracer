@@ -464,7 +464,7 @@ public:
 				if (scene->visible(shadingData.x, shadingData.x + (p * 1000.0f)))
 				{
 					// multiple importance sampling
-					float weight = settings.useMis ? pdf / (pmf + misPdf) : 1.0f;
+					float weight = settings.useMis ? pdf / (pdf + misPdf) : 1.0f;
 					// Shade
 					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm * weight / pdf;
 				}

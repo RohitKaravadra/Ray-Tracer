@@ -141,7 +141,11 @@ public:
 	unsigned int width;
 	unsigned int height;
 
+	float invWidth;
+	float invHeight;
+
 	float totalLum;
+	float avgLum;
 	std::vector<float> lum;
 	std::vector<float> cdfRows;
 	std::vector<std::vector<float>> cdfCols;
@@ -162,54 +166,42 @@ public:
 		width = txt->width;
 		height = txt->height;
 
+		invWidth = 1.0f / (float)(width);
+		invHeight = 1.0f / (float)(height);
+
 		lum.resize(width * height);
 		cdfRows.resize(height);
 		cdfCols.resize(height, std::vector<float>(width));
 
-		// Compute luminance and row sums
 		totalLum = 0.0f;
-		float invhPI = 1.0f / ((float)height * M_PI);
-
-		for (int i = 0; i < height; i++)
+		for (unsigned int y = 0; y < height; y++)
 		{
-			float st = sinf(((float)i / (float)height) * M_PI);  // calculate Sin-weighting
+			float sinTheta = sinf(M_PI * ((float)y + 0.05f) / (float)(height - 1));
 			float rowSum = 0.0f;
-
-			for (int n = 0; n < width; n++)
+			for (unsigned int x = 0; x < width; x++)
 			{
-				unsigned int index = (i * width) + n;
-				lum[index] = txt->texels[index].Lum() * st;
+				unsigned int index = y * width + x;
+				lum[index] = txt->texels[index].Lum() * sinTheta;	// weight the luminance by the sin of the angle
+				cdfCols[y][x] = lum[index];							// cdfCols is the marginal PDF
 				rowSum += lum[index];
-				cdfCols[i][n] = rowSum; // Store prefix sum (not normalized yet)
 			}
-
-			cdfRows[i] = rowSum; // Store row sum
+			cdfRows[y] = rowSum;	// cdfRows is the conditional PDF
 			totalLum += rowSum;
 		}
+		avgLum = totalLum * invHeight * invWidth; // average luminance
 
-		// Normalize cdfCols (convert to cumulative distribution)
-		for (int i = 0; i < height; i++)
+		float accumCol = 0.0f, accumRow = 0.0f;
+		for (unsigned y = 0; y < height; y++)
 		{
-			if (cdfRows[i] > 0.0f)
+			accumCol = 0.0f;
+			for (unsigned int x = 0; x < width; x++)
 			{
-				float invRowSum = 1.0f / cdfRows[i];
-
-				for (int n = 0; n < width; n++)
-					cdfCols[i][n] *= invRowSum;
-
-				cdfCols[i][width - 1] = 1.0f; // Ensure the last value is exactly 1.0
+				accumCol += cdfCols[y][x] / cdfRows[y];
+				cdfCols[y][x] = accumCol;	// normalize the marginal PDF
 			}
+			accumRow += cdfRows[y] / totalLum;
+			cdfRows[y] = accumRow; // normalize the conditional PDF
 		}
-
-		// Convert cdfRows into a proper cumulative distribution
-		float accumulated = 0.0f;
-		float invTotalLum = 1.0f / totalLum;
-		for (int i = 0; i < height; i++)
-		{
-			accumulated += cdfRows[i] * invTotalLum;
-			cdfRows[i] = accumulated;
-		}
-		cdfRows[height - 1] = 1.0f; // Ensure the last value is exactly 1.0
 
 		std::cout << "Tabulated Distribution created..." << std::endl;
 	}
@@ -265,8 +257,8 @@ public:
 		pdf = getPdf(row, col);
 
 		// calculate uv
-		v = (float)row / (float)(height - 1.0f);
-		u = (float)col / (float)(width - 1.0f);
+		u = (float)col * invWidth;
+		v = (float)row * invHeight;
 
 		// Convert (u, v) to spherical coordinates
 		float phi = u * 2.0f * M_PI;
@@ -277,8 +269,8 @@ public:
 		// Convert (theta, phi) to Cartesian direction
 		Vec3 wi;
 		wi.x = sinTheta * cosf(phi);
-		wi.y = cosf(theta);
-		wi.z = sinTheta * sinf(phi);
+		wi.y = sinTheta * sinf(phi);
+		wi.z = cosf(theta);
 
 		return wi;
 	}
@@ -289,16 +281,16 @@ public:
 		int col = binarySearch(cdfCols[row], sampler->next());	// calculate column
 
 		// Convert (u, v) to spherical coordinates
-		float phi = col * 2.0f * M_PI / (float)(width - 1.0f);
-		float theta = acosf(1.0f - 2.0f * row / (float)(height - 1.0f));
+		float phi = col * invWidth * 2.0f * M_PI;
+		float theta = acosf(1.0f - 2.0f * row * invHeight);
 
 		float sinTheta = sinf(theta);
 
 		// Convert (theta, phi) to Cartesian direction
 		Vec3 wi;
 		wi.x = sinTheta * cosf(phi);
-		wi.y = cosf(theta);
-		wi.z = sinTheta * sinf(phi);
+		wi.y = sinTheta * sinf(phi);
+		wi.z = cosf(theta);
 
 		return wi;
 	}
@@ -384,7 +376,7 @@ public:
 
 	float totalIntegratedPower()
 	{
-		return tabDist.totalLum * 4.0f * M_PI / (float)(env->width * env->height);
+		return tabDist.avgLum * 4.0f * M_PI;
 
 		float total = 0;
 		for (int i = 0; i < env->height; i++)
@@ -402,9 +394,7 @@ public:
 	Vec3 samplePositionFromLight(Sampler* sampler, float& pdf)
 	{
 		// Samples a point on the bounding sphere of the scene. Feel free to improve this.
-		Vec3 p = useTabulated ? tabDist.sample(sampler) :
-			SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
-
+		Vec3 p = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
 		p = p * use<SceneBounds>().sceneRadius;
 		p = p + use<SceneBounds>().sceneCentre;
 		pdf = 1.0f / (4 * M_PI * SQ(use<SceneBounds>().sceneRadius));
@@ -414,19 +404,9 @@ public:
 
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf)
 	{
-		if (useTabulated)
-		{
-			// sample from tabulated distribution
-			float u, v;
-			Vec3 wi = tabDist.sample(sampler, u, v, pdf);
-			return wi;
-		}
-		else
-		{
-			// sample from uniform sphere
-			Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
-			pdf = SamplingDistributions::cosineHemispherePDF(wi);
-			return wi;
-		}
+		// sample from uniform sphere
+		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
+		pdf = SamplingDistributions::cosineHemispherePDF(wi);
+		return wi;
 	}
 };
