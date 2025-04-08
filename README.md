@@ -20,8 +20,8 @@ The ray tracer is entirely CPU-based, focusing on clean implementation, extensib
 It serves as both a learning project and a foundation for further experimentation in physically-based rendering.
 
 ## Instructions
-Scenes are not included with this directory , you need to download scens from [Here](URL).<br>
-Create a scene folder inside RayTracer directory and place scenes inside of this.
+Scenes are not included with this directory , you need to download scens from [Here](https://github.com/RohitKaravadra/Ray-Tracer-Scenes.git).<br>
+Create a scene folder inside RayTracer directory and place scenes inside of it.
 
 Use the belove section from ***Main.h*** file to change scenes
 
