@@ -2,8 +2,9 @@
 
 ## About
 
-This project is a CPU-based physically-based ray tracer built from scratch, implementing several global illumination techniques to achieve realistic image synthesis. It features:
+This project is a physically-based (CPU) ray tracer built upon the template provided by [MSCGamesTom](https://github.com/MSCGamesTom) for the Advanced Graphics coursework during my MSc in Games Engineering. It implements several global illumination techniques to achieve realistic image synthesis.
 
+It features:
 - Path Tracing with Monte Carlo integration
 - Light Tracing (reverse path tracing)
 - Instant Radiosity with Virtual Point Lights (VPLs)
