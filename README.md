@@ -1,5 +1,8 @@
 # Ray Tracer
 
+![Image1](Readme/Image1.png)
+![Image2](Readme/Image2.png)
+
 ## About
 
 This project is a physically-based (CPU) ray tracer built upon the template provided by [MSCGamesTom](https://github.com/MSCGamesTom) for the Advanced Graphics coursework during my MSc in Games Engineering. It implements several global illumination techniques to achieve realistic image synthesis.
@@ -63,6 +66,3 @@ SETTINGS createSettings()
 	return settings;
 }
 ```
-
-![Image1](Readme/Image1.png)
-![Image2](Readme/Image2.png)
