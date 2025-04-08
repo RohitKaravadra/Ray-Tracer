@@ -19,7 +19,7 @@ Optimizations for performance and quality:
 The ray tracer is entirely CPU-based, focusing on clean implementation, extensibility, and high-quality offline rendering. 
 It serves as both a learning project and a foundation for further experimentation in physically-based rendering.
 
-## Instruction
+## Instructions
 Scenes are not included with this directory , you need to download scens from [Here](URL).<br>
 Create a scene folder inside RayTracer directory and place scenes inside of this.
 
