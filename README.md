@@ -1,12 +1,13 @@
 # Ray Tracer
 
-![Image1](Readme/Image1.png)
-![Image2](Readme/Image2.png)
-
-## About
+## 📌 About
 
 This project is a physically-based (CPU) ray tracer built upon the template provided by [MSCGamesTom](https://github.com/MSCGamesTom) for the Advanced Graphics coursework during my MSc in Games Engineering. It implements several global illumination techniques to achieve realistic image synthesis.
 
+![Image1](Readme/Image1.png)
+![Image2](Readme/Image2.png)
+
+## 🚀 Features
 It features:
 - Path Tracing with Monte Carlo integration
 - Light Tracing (reverse path tracing)
@@ -23,7 +24,7 @@ Optimizations for performance and quality:
 The ray tracer is entirely CPU-based, focusing on clean implementation, extensibility, and high-quality offline rendering. 
 It serves as both a learning project and a foundation for further experimentation in physically-based rendering.
 
-## Instructions
+## 🧾 Instructions
 Scenes are not included with this directory , you need to download scens from [Here](https://github.com/RohitKaravadra/Ray-Tracer-Scenes.git).<br>
 Create a scene folder inside RayTracer directory and place scenes inside of it.
 
