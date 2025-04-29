@@ -137,13 +137,6 @@ public:
 			if (shadingData.bsdf->isLight() || shadingData.bsdf->isPureSpecular())
 				return;
 
-			// Russian Roulette for termination
-			float russianRouletteProbability = min(pathThroughput.Lum(), 0.9f);
-			if (russianRouletteProbability < sampler->next())
-				return;
-
-			pathThroughput = pathThroughput / russianRouletteProbability;
-
 			// Sample new direction
 			Colour bsdf;
 			float pdf;
@@ -158,6 +151,13 @@ public:
 
 			// update vpls list
 			vplList.emplace_back(vpl);
+
+			// Russian Roulette for termination
+			float russianRouletteProbability = min(pathThroughput.Lum(), 0.9f);
+			if (russianRouletteProbability < sampler->next())
+				return;
+
+			pathThroughput = pathThroughput / russianRouletteProbability;
 
 			// Create new ray
 			r.init(shadingData.x + (wi * EPSILON), wi);
@@ -191,7 +191,7 @@ public:
 			Vec3 nLight = light->normal(shadingData, wi);
 
 			float cosTheta = Dot(wi, nLight);
-			Colour Le = light->evaluate(-wi) * cosTheta / (pmf * pdfPos * pdfDir);
+			Colour Le = light->evaluate(-wi) * cosTheta / (pmf * pdfPos);
 
 			VPL vpl;
 			vpl.shadingData = ShadingData(p, nLight);
@@ -349,16 +349,16 @@ public:
 			if (shadingData.bsdf->isLight() || shadingData.bsdf->isPureSpecular())
 				return;
 
+			// connect to camera and draw pixel
+			Vec3 wi = (scene->camera.origin - shadingData.x).normalize();
+			Colour col = pathThroughput * shadingData.bsdf->evaluate(shadingData, wi) * Le;
+			connectToCamera(shadingData.x, shadingData.sNormal, col);
+
 			// Russian Roulette for termination
 			float russianRouletteProbability = min(pathThroughput.Lum(), 0.9f);
 			if (russianRouletteProbability < sampler->next())
 				return;
-
 			pathThroughput = pathThroughput / russianRouletteProbability;
-
-			Vec3 wi = (scene->camera.origin - shadingData.x).normalize();
-			Colour col = pathThroughput * shadingData.bsdf->evaluate(shadingData, wi) * Le;
-			connectToCamera(shadingData.x, shadingData.sNormal, col);
 
 			// Sample new direction
 			Colour bsdf;
@@ -394,7 +394,7 @@ public:
 		Vec3 nLight = light->normal(shadingData, wi);
 
 		float cosTheta = Dot(wi, nLight);
-		Colour Le = light->evaluate(-wi) / (pmf * pdfPos * pdfDir);
+		Colour Le = light->evaluate(-wi) / (pmf * pdfPos);
 
 		// connect to camera to draw light
 		if (settings.canHitLight)
