@@ -6,13 +6,14 @@
 #define NOMINMAX
 #include "GamesEngineeringBase.h"
 #include <unordered_map>
+#include "SceneManager.h"
 
 // create settings
 SETTINGS createSettings()
 {
 	SETTINGS settings;
 
-	settings.algorithm = AL_PATH_TRACE;
+	settings.algorithm = AL_LIGHT_TRACE;
 	settings.drawMode = DM_ALGORITHM;
 	settings.toneMap = TM_LINEAR;
 	settings.filter = FT_BOX;
@@ -26,7 +27,7 @@ SETTINGS createSettings()
 
 	settings.adaptiveSampling = true;
 	settings.initSPP = 10;
-	settings.totalSPP = 500;
+	settings.totalSPP = 200;
 
 	settings.numThreads = 20;
 	settings.maxBounces = 5;
@@ -35,99 +36,19 @@ SETTINGS createSettings()
 	return settings;
 }
 
-// scene names
-const std::string scenes[] = { "scenes/cornell-box",		// 0
-							   "scenes/bathroom",			// 1
-							   "scenes/bathroom2",			// 2
-							   "scenes/bedroom",			// 3
-							   "scenes/classroom",			// 4
-							   "scenes/coffee",				// 5
-							   "scenes/dining-room",		// 6		
-							   "scenes/glass-of-water",		// 7
-							   "scenes/house",				// 8
-							   "scenes/kitchen",			// 9
-							   "scenes/living-room",		// 10		
-							   "scenes/living-room-2",		// 11
-							   "scenes/living-room-3",		// 12
-							   "scenes/Sibenik",			// 13	
-							   "scenes/staircase",			// 14	
-							   "scenes/staircase2",			// 15		
-							   "scenes/Terrain",			// 16	
-							   "scenes/veach-bidir",		// 17		
-							   "scenes/veach-mis",			// 18	
-							   "scenes/MaterialsScene",		// 19
-							   "scenes/car2",				// 20
-							   "scenes/materialball",		// 21
-							   "scenes/teapot-full",		// 22
-							   "scenes/Sponza",				// 23
-};
-
-// current scene number
-// change this to render different scenes
-const unsigned int sceneNum = 0;
-
-
-
-int main(int argc, char* argv[])
+int main()
 {
+	SceneManager sceneManager;
+	sceneManager.load(SCENES::BATHROOM);
 	SETTINGS settings = createSettings();
-
-	std::string sceneName = scenes[sceneNum];
-	std::string filename = scenes[sceneNum] + "_GI.hdr";
-
-	if (argc > 1)
-	{
-		std::unordered_map<std::string, std::string> args;
-		for (int i = 1; i < argc; ++i)
-		{
-			std::string arg = argv[i];
-			if (!arg.empty() && arg[0] == '-')
-			{
-				std::string argName = arg;
-				if (i + 1 < argc)
-				{
-					std::string argValue = argv[++i];
-					args[argName] = argValue;
-				}
-				else
-				{
-					std::cerr << "Error: Missing value for argument '" << arg << "'\n";
-				}
-			}
-			else
-			{
-				std::cerr << "Warning: Ignoring unexpected argument '" << arg << "'\n";
-			}
-		}
-		for (const auto& pair : args)
-		{
-			if (pair.first == "-scene")
-			{
-				sceneName = pair.second;
-			}
-			if (pair.first == "-outputFilename")
-			{
-				filename = pair.second;
-			}
-			if (pair.first == "-SPP")
-			{
-				settings.totalSPP = stoi(pair.second);
-			}
-		}
-	}
-
-	// Load scene and camera
-	RTCamera viewcamera;
-	std::cout << "Loading scene: " << scenes[sceneNum] << std::endl;
-	Scene* scene = loadScene(sceneName, viewcamera);
 
 	// Create canvas
 	GamesEngineeringBase::Window canvas;
-	canvas.create((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, "Tracer", 1.0f);
+	canvas.create((unsigned int)sceneManager.curScene->camera.width, (unsigned int)sceneManager.curScene->camera.height, "Tracer", 1.0f);
 
 	// Create ray tracer
 	RayTracer rt;
-	rt.init(scene, &canvas, settings);
+	rt.init(sceneManager.curScene, &canvas, settings);
 
 	// Create timer
 	GamesEngineeringBase::Timer timer;
@@ -150,7 +71,7 @@ int main(int argc, char* argv[])
 		}
 
 		// Update camera and check if it has changed (reset if it has)
-		if (viewcamera.update(canvas))
+		if (sceneManager.viewcamera->update(canvas))
 		{
 			rt.clear();
 			totalTime = 0;
@@ -188,24 +109,24 @@ int main(int argc, char* argv[])
 			std::cout << "Total time : " << std::roundf(totalTime) << " sec                \n";
 		}
 
-		if (canvas.keyPressed('P'))
-		{
-			rt.savePNG(filename);
-		}
-
-		if (canvas.keyPressed('L'))
-		{
-			size_t pos = filename.find_last_of('.');
-			std::string ldrFilename = filename.substr(0, pos) + ".png";
-			rt.savePNG(ldrFilename);
-		}
+		//if (canvas.keyPressed('P'))
+		//{
+		//	rt.savePNG(filename);
+		//}
+		//
+		//if (canvas.keyPressed('L'))
+		//{
+		//	size_t pos = filename.find_last_of('.');
+		//	std::string ldrFilename = filename.substr(0, pos) + ".png";
+		//	rt.savePNG(ldrFilename);
+		//}
 
 		if (!completed && settings.totalSPP <= rt.getSPP() && settings.drawMode == DM_ALGORITHM)
 		{
 			completed = true;
 
 			// denoising
-			rt.saveHDR(filename);
+			//rt.saveHDR(filename);
 			if (settings.denoise)
 			{
 				rt.createAOV(aov);
@@ -222,8 +143,6 @@ int main(int argc, char* argv[])
 
 		canvas.present();
 	}
-
-	delete scene;
 
 	return 0;
 }
