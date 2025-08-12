@@ -102,6 +102,12 @@ public:
 	{
 		return ((0.2126f * r) + (0.7152f * g) + (0.0722f * b));
 	}
+
+	Colour normalize()
+	{
+		float l = 1.0f / sqrtf((r * r) + (g * g) + (b * b));
+		return Colour(r * l, g * l, b * l);
+	}
 };
 
 class Vec3

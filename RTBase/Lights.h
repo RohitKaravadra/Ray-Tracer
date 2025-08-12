@@ -14,14 +14,28 @@ public:
 	float sceneRadius;
 };
 
+struct LightSample
+{
+	Vec3 p;				// position of the light sample
+	Vec3 n;				// normal at the light sample position
+
+	bool isNull;		// true if the light sample is null (no light)
+	bool isArea;		// true if the light sample is from an area light
+
+	float pdf;			// probability density function value for the sample
+	float pmf;			// probability mass function value for the sample
+
+	Colour emitted;		// emission colour of the light sample
+};
+
 class Light
 {
 public:
-	virtual Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& emittedColour, float& pdf) = 0;
+	virtual Vec3 sample(Sampler* sampler, Colour& emittedColour, float& pdf) = 0;
 	virtual Colour evaluate(const Vec3& wi) = 0;
 	virtual float PDF(const ShadingData& shadingData, const Vec3& wi) = 0;
 	virtual bool isArea() = 0;
-	virtual Vec3 normal(const ShadingData& shadingData, const Vec3& wi) = 0;
+	virtual Vec3 normal(const Vec3& wi) = 0;
 	virtual float totalIntegratedPower() = 0;
 	virtual Vec3 samplePositionFromLight(Sampler* sampler, float& pdf) = 0;
 	virtual Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf) = 0;
@@ -33,7 +47,7 @@ public:
 	Triangle* triangle = NULL;
 	Colour emission;
 
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& emittedColour, float& pdf)
+	Vec3 sample(Sampler* sampler, Colour& emittedColour, float& pdf) override
 	{
 		emittedColour = emission;
 		return triangle->sample(sampler, pdf);
@@ -57,7 +71,7 @@ public:
 		return true;
 	}
 
-	Vec3 normal(const ShadingData& shadingData, const Vec3& wi)
+	Vec3 normal(const Vec3& wi) override
 	{
 		return triangle->gNormal();
 	}
@@ -91,7 +105,7 @@ public:
 	{
 		emission = _emission;
 	}
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sample(Sampler* sampler, Colour& reflectedColour, float& pdf) override
 	{
 		Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
 		pdf = SamplingDistributions::uniformSpherePDF(wi);
@@ -110,7 +124,7 @@ public:
 	{
 		return false;
 	}
-	Vec3 normal(const ShadingData& shadingData, const Vec3& wi)
+	Vec3 normal(const Vec3& wi)
 	{
 		return -wi;
 	}
@@ -207,19 +221,17 @@ public:
 		std::cout << "Tabulated Distribution created..." << std::endl;
 	}
 
-	static int binarySearch(const std::vector<float>& cdf, float value) {
-
+	static int binarySearch(const std::vector<float>& cdf, float value)
+	{
 		const int n = static_cast<int>(cdf.size());
+		if (n == 0) return 0;
 
-		if (value <= cdf[0]) return 0;
-		if (value >= cdf[n - 1]) return n - 1;
-
-		int left = 0, right = static_cast<int>(cdf.size()) - 1;
+		int left = 0;
+		int right = n - 1;
 
 		while (left < right)
 		{
 			int mid = left + (right - left) / 2;
-
 			if (cdf[mid] < value)
 				left = mid + 1;
 			else
@@ -229,77 +241,90 @@ public:
 		return left;
 	}
 
-	float getPdf(unsigned int row, unsigned int col)
+	float getPdf(int row, int col) const
 	{
-		// Marginal PDF (row) and conditional PDF (column)
-		float mPDF = (row == 0) ? cdfRows[row] : (cdfRows[row] - cdfRows[row - 1]);
-		float cPDF = (col == 0) ? cdfCols[row][col] : (cdfCols[row][col] - cdfCols[row][col - 1]);
+		if (row < 0 || row >= height || col < 0 || col >= width)
+			return 0.0f;
 
-		// Normalize by pixel count
-		float pdf = (mPDF * cPDF) * (width * height);
-		return pdf < EPSILON ? EPSILON : pdf;
+		// Compute marginal PDF for row
+		float marginalPdf = (row == 0) ? cdfRows[row] : (cdfRows[row] - cdfRows[row - 1]);
+
+		// Compute conditional PDF for column
+		float conditionalPdf = (col == 0) ? cdfCols[row][col] : (cdfCols[row][col] - cdfCols[row][col - 1]);
+
+		// Combined PDF needs to account for the 2D domain size
+		float pdf = marginalPdf * conditionalPdf * (width * height);
+
+		return std::max(pdf, EPSILON);
 	}
 
-	float getPdf(float u, float v)
+	float getPdf(float u, float v) const
 	{
-		unsigned int row = v * (height - 1);
-		unsigned int col = u * (width - 1);
+		// Clamp and scale to [0,1]
+		u = std::max(0.0f, std::min(1.0f - 1e-6f, u));
+		v = std::max(0.0f, std::min(1.0f - 1e-6f, v));
+
+		int row = static_cast<int>(v * height);
+		int col = static_cast<int>(u * width);
 
 		return getPdf(row, col);
 	}
 
-
-	Vec3 sample(Sampler* sampler, float& u, float& v, float& pdf)
+	Vec3 sample(Sampler* sampler, float& u, float& v, float& pdf) const
 	{
-		unsigned int row = binarySearch(cdfRows, sampler->next());		// calculate row
-		unsigned int col = binarySearch(cdfCols[row], sampler->next());	// calculate column
+		// Sample row (marginal)
+		float rand1 = sampler->next();
+		int row = binarySearch(cdfRows, rand1);
+		row = std::max(0, std::min(row, static_cast<int>(height) - 1));
 
-		// calculate pdf
+		// Sample column (conditional)
+		float rand2 = sampler->next();
+		int col = binarySearch(cdfCols[row], rand2);
+		col = std::max(0, std::min(col, static_cast<int>(width) - 1));
+
+		// Compute PDF
 		pdf = getPdf(row, col);
 
-		// calculate uv
-		u = (float)col * invWidth;
-		v = (float)row * invHeight;
+		// Compute UV coordinates (with jittering for better stratification)
+		u = (col + sampler->next()) * invWidth;
+		v = (row + sampler->next()) * invHeight;
 
-		// Convert (u, v) to spherical coordinates
+		// Convert to spherical coordinates
 		float phi = u * 2.0f * M_PI;
-		float theta = acosf(1.0f - 2.0f * v);
+		float theta = v * M_PI;  // More accurate than acos(1-2v)
 
+		// Convert to Cartesian direction
 		float sinTheta = sinf(theta);
-
-		// Convert (theta, phi) to Cartesian direction
-		Vec3 wi;
-		wi.x = sinTheta * cosf(phi);
-		wi.y = sinTheta * sinf(phi);
-		wi.z = cosf(theta);
-
-		return wi;
+		return Vec3(
+			sinTheta * cosf(phi),
+			cosf(theta),
+			sinTheta * sinf(phi)
+		);
 	}
 
-	Vec3 sample(Sampler* sampler)
+	Vec3 sample(Sampler* sampler, float& pdf) const
 	{
-		int row = binarySearch(cdfRows, sampler->next());		// calculate row
-		int col = binarySearch(cdfCols[row], sampler->next());	// calculate column
-
-		// Convert (u, v) to spherical coordinates
-		float phi = col * invWidth * 2.0f * M_PI;
-		float theta = acosf(1.0f - 2.0f * row * invHeight);
-
-		float sinTheta = sinf(theta);
-
-		// Convert (theta, phi) to Cartesian direction
-		Vec3 wi;
-		wi.x = sinTheta * cosf(phi);
-		wi.y = sinTheta * sinf(phi);
-		wi.z = cosf(theta);
-
-		return wi;
+		float u, v;
+		return sample(sampler, u, v, pdf);
 	}
 
-	float getLum(float u, float v)
+	Vec3 sample(Sampler* sampler) const
 	{
-		int row = v * (height - 1);
-		int col = u * (width - 1);
+		float pdf, u, v;
+		return sample(sampler, u, v, pdf);
+	}
+
+	float getLum(float u, float v) const
+	{
+		u = std::max(0.0f, std::min(1.0f - 1e-6f, u));
+		v = std::max(0.0f, std::min(1.0f - 1e-6f, v));
+
+		int row = static_cast<int>(v * height);
+		int col = static_cast<int>(u * width);
+
+		if (row < 0 || row >= height || col < 0 || col >= width)
+			return 0.0f;
+
 		return lum[row * width + col];
 	}
 };
@@ -318,7 +343,7 @@ public:
 		tabDist.init(env);
 	}
 
-	Vec3 sampleSpherical(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sampleSpherical(Sampler* sampler, Colour& reflectedColour, float& pdf)
 	{
 		// Assignment: Update this code to importance sampling lighting based on luminance of each pixel
 		Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
@@ -327,7 +352,7 @@ public:
 		return wi;
 	}
 
-	Vec3 sampleTabulated(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sampleTabulated(Sampler* sampler, Colour& reflectedColour, float& pdf)
 	{
 		float u, v;
 		Vec3 wi = tabDist.sample(sampler, u, v, pdf);
@@ -335,10 +360,10 @@ public:
 		return wi;
 	}
 
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sample(Sampler* sampler, Colour& reflectedColour, float& pdf) override
 	{
-		return useTabulated ? sampleTabulated(shadingData, sampler, reflectedColour, pdf) :
-			sampleSpherical(shadingData, sampler, reflectedColour, pdf);
+		return useTabulated ? sampleTabulated(sampler, reflectedColour, pdf) :
+			sampleSpherical(sampler, reflectedColour, pdf);
 	}
 
 	Colour evaluate(const Vec3& wi)
@@ -365,49 +390,31 @@ public:
 		return tabDist.getPdf(u, v);
 	}
 
-	bool isArea()
-	{
+	bool isArea() {
 		return false;
 	}
 
-	Vec3 normal(const ShadingData& shadingData, const Vec3& wi)
-	{
+	Vec3 normal(const Vec3& wi) {
 		return -wi;
 	}
 
-	float totalIntegratedPower()
-	{
+	float totalIntegratedPower() {
 		return tabDist.avgLum * 4.0f * M_PI;
-
-		float total = 0;
-		for (int i = 0; i < env->height; i++)
-		{
-			float st = sinf(((float)i / (float)env->height) * M_PI);
-			for (int n = 0; n < env->width; n++)
-			{
-				total += (env->texels[(i * env->width) + n].Lum() * st);
-			}
-		}
-		total = total / (float)(env->width * env->height);
-		return total * 4.0f * M_PI;
 	}
 
 	Vec3 samplePositionFromLight(Sampler* sampler, float& pdf)
 	{
 		// Samples a point on the bounding sphere of the scene. Feel free to improve this.
-		Vec3 p = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
+		Vec3 p = tabDist.sample(sampler, pdf);
 		p = p * use<SceneBounds>().sceneRadius;
 		p = p + use<SceneBounds>().sceneCentre;
-		pdf = 1.0f / (4 * M_PI * SQ(use<SceneBounds>().sceneRadius));
-
 		return p;
 	}
 
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf)
 	{
 		// sample from uniform sphere
-		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
-		pdf = SamplingDistributions::cosineHemispherePDF(wi);
+		Vec3 wi = tabDist.sample(sampler, pdf);
 		return wi;
 	}
 };

@@ -9,10 +9,10 @@ enum ALGORITHM
 
 enum DRAW_MODE
 {
-	DM_ALGORITHM,
 	DM_NORMALS,
 	DM_ALBEDO,
-	DM_DIRECT
+	DM_DIRECT,
+	DM_LIGHTS
 };
 
 struct SETTINGS
@@ -25,9 +25,9 @@ struct SETTINGS
 	bool useMultithreading;			// multithreading enabled
 	bool useMis;					// multiple importance sampling
 	bool adaptiveSampling;			// tile based adaptive sampling
-	bool canHitLight;
 	bool debug;
 	bool denoise;					// set to true to denoise the image
+	bool render;
 
 	unsigned int numThreads;		// number of threads for multithreading
 	unsigned int maxBounces;		// max number of bounces for path tracing
@@ -40,14 +40,13 @@ struct SETTINGS
 	SETTINGS()
 	{
 		algorithm = AL_PATH_TRACE;
-		drawMode = DM_ALGORITHM;
+		drawMode = DM_NORMALS;
 		toneMap = TM_NONE;
 		filter = FT_BOX;
 
 		useMultithreading = false;
 		useMis = false;
 		adaptiveSampling = false;
-		canHitLight = false;
 		debug = false;
 		denoise = false;
 

@@ -188,7 +188,7 @@ public:
 
 			ShadingData shadingData;
 			// calculate light emmision
-			Vec3 nLight = light->normal(shadingData, wi);
+			Vec3 nLight = light->normal(wi);
 
 			float cosTheta = Dot(wi, nLight);
 			Colour Le = light->evaluate(-wi) * cosTheta / (pmf * pdfPos);
@@ -217,8 +217,7 @@ public:
 
 		if (shadingData.bsdf->isLight())
 		{
-			return settings.canHitLight ? shadingData.bsdf->emit(shadingData, shadingData.wo)
-				: Colour(0.0f, 0.0f, 0.0f);
+			return shadingData.bsdf->emit(shadingData, shadingData.wo);
 		}
 
 		Colour accumulated(0.0f, 0.0f, 0.0f);
@@ -391,14 +390,13 @@ public:
 
 		ShadingData shadingData;
 		// calculate light emmision
-		Vec3 nLight = light->normal(shadingData, wi);
+		Vec3 nLight = light->normal(wi);
 
 		float cosTheta = Dot(wi, nLight);
 		Colour Le = light->evaluate(-wi) / (pmf * pdfPos);
 
 		// connect to camera to draw light
-		if (settings.canHitLight)
-			connectToCamera(p, nLight, Le);
+		connectToCamera(p, nLight, Le);
 
 		// normalize light if area light
 		if (light->isArea())
@@ -414,121 +412,123 @@ public:
 
 	// PATH TRACE #####################################################################################################
 
-	Colour computeDirect(ShadingData shadingData, Sampler* sampler, float misPdf = 0)
+	float powerHeuristic(float pdfA, float pdfB)
 	{
-		// Is surface is specular we cannot computing direct lighting
-		if (shadingData.bsdf->isPureSpecular() == true)
+		float a2 = pdfA * pdfA;
+		float b2 = pdfB * pdfB;
+
+		if (a2 + b2 == 0.0f)
+			return 0.0f;
+
+		return a2 / (a2 + b2);
+	}
+
+	Colour computeDirect(ShadingData shadingData, float& lightPdf, Sampler* sampler)
+	{
+		if (shadingData.bsdf->isPureSpecular())
 		{
 			return Colour(0.0f, 0.0f, 0.0f);
 		}
 
-		// Sample a light
-		float pmf;
-		Light* light = scene->sampleLight(sampler, pmf);
+		// Light sampling part
+		LightSample light = scene->sampleLightPoint(sampler);
+		if (light.isNull)
+			return Colour(0.0f, 0.0f, 0.0f);
 
-		// Sample a point on the light
-		float pdf;
-		Colour emitted;
-		Vec3 p = light->sample(shadingData, sampler, emitted, pdf);
+		lightPdf = light.pdf * light.pmf;
 
-		pdf *= pmf;
-		if (light->isArea())
+		Vec3 wi = light.p - shadingData.x;
+		float lengthSq = light.isArea ? wi.lengthSq() : 1.0f;
+		wi = wi.normalize();
+
+		float cosThetaSurface = max(Dot(wi, shadingData.sNormal), 0.0f);
+		float gTerm = cosThetaSurface / lengthSq;
+
+		if (light.isArea)
 		{
-			// Calculate G Term
-			Vec3 wi = p - shadingData.x;
-			float lengthSq = wi.lengthSq();
-			wi = wi.normalize();
-
-			float gTerm = (max(Dot(wi, shadingData.sNormal), 0.0f) *
-				max(-Dot(wi, light->normal(shadingData, wi)), 0.0f)) / lengthSq;
-
-			if (gTerm > 0)
-			{
-				// Trace
-				if (scene->visible(shadingData.x, p))
-				{
-					// Shade
-					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm / pdf;
-				}
-			}
+			float cosThetaLight = max(-Dot(wi, light.n), 0.0f);
+			gTerm *= cosThetaLight;
 		}
-		else
+
+		if (gTerm > 0.0f && scene->visible(shadingData.x, light.p))
 		{
-			// Calculate G Term
-			Vec3 wi = p.normalize();
-			float gTerm = max(Dot(wi, shadingData.sNormal), 0.0f);
-			if (gTerm > 0)
-			{
-				// Trace
-				if (scene->visible(shadingData.x, shadingData.x + (p * 1000.0f)))
-				{
-					// multiple importance sampling
-					float weight = settings.useMis ? pdf / (pdf + misPdf) : 1.0f;
-					// Shade
-					return shadingData.bsdf->evaluate(shadingData, wi) * emitted * gTerm * weight / pdf;
-				}
-			}
+			Colour bsdfVal = shadingData.bsdf->evaluate(shadingData, wi);
+			float bsdfPdf = shadingData.bsdf->PDF(shadingData, wi);
+
+			// Balance heuristic for MIS
+			float misWeight = powerHeuristic(lightPdf, bsdfPdf);
+
+			return (light.emitted * bsdfVal * gTerm * misWeight) / lightPdf;
 		}
 
 		return Colour(0.0f, 0.0f, 0.0f);
 	}
 
-	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, bool canHitLight, float misPdf = 0)
+	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, float misWeight, bool canHitLight)
 	{
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
 
-		//return Colour(1, 1, 1) * scene->background->PDF(shadingData, r.dir);
-
 		if (shadingData.t < FLT_MAX)
 		{
+			// Handle light hit
 			if (shadingData.bsdf->isLight())
 			{
-				return canHitLight ? pathThroughput * shadingData.bsdf->emit(shadingData, shadingData.wo)
-					: Colour(0.0f, 0.0f, 0.0f);
+				pathThroughput = pathThroughput * shadingData.bsdf->emit(shadingData, shadingData.wo);
+
+				if (canHitLight)
+					return pathThroughput;
+
+				return pathThroughput * misWeight;
 			}
 
-			// calculate direct lighting with MIS
-			Colour direct = pathThroughput * computeDirect(shadingData, sampler, misPdf);
+			// Direct lighting (with MIS)
+			float lightPdf = 0.0f;
+			Colour direct = pathThroughput * computeDirect(shadingData, lightPdf, sampler);
 
-			// max depth reached
+			// Russian roulette termination
 			if (depth >= settings.maxBounces)
+			{
 				return direct;
+			}
 
-			// russian roulette
-			float russianRouletteProbability = min(pathThroughput.Lum(), 0.9f);
-			if (russianRouletteProbability < sampler->next())
+			float rrProbability = min(max(pathThroughput.Lum(), 0.05f), 0.95f);
+			if (sampler->next() >= rrProbability)
+			{
 				return direct;
+			}
+			pathThroughput = pathThroughput / rrProbability;
 
-			pathThroughput = pathThroughput / russianRouletteProbability;
-
-			// sample new direction
+			// Sample BSDF for next path segment
 			Colour bsdf;
-			float pdf;
-			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, bsdf, pdf);
+			float bsdfPdf;
+			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, bsdf, bsdfPdf);
 
-			// calculate throughput
-			pathThroughput = pathThroughput * bsdf * fabsf(wi.dot(shadingData.sNormal)) / pdf;
-			// create new ray
+			// Update path throughput
+			float cosTheta = abs(Dot(wi, shadingData.sNormal));
+			pathThroughput = (pathThroughput * bsdf * cosTheta) / bsdfPdf;
+
+			// Spawn next ray
 			r.init(shadingData.x + (wi * EPSILON), wi);
 
-			// trace new ray
-			return direct + pathTrace(r, pathThroughput, depth + 1, sampler, shadingData.bsdf->isPureSpecular(), pdf);
+			//calculate MIS weight
+			misWeight = powerHeuristic(bsdfPdf, lightPdf);
+
+			// Indirect lighting (recursive call)
+			Colour indirect = pathTrace(r, pathThroughput, depth + 1, sampler, misWeight, shadingData.bsdf->isPureSpecular());
+
+			// Combine direct and indirect lighting
+			return direct + indirect;
 		}
 
-		if (depth == 0)
-			return scene->background->evaluate(r.dir);
-
-		// multiple importance sampling
-		float pdf = scene->background->PDF(shadingData, r.dir);
-		float weight = settings.useMis ? pdf / (pdf + misPdf) : 1.0f;
-		return scene->background->evaluate(r.dir) * pathThroughput * weight / pdf;
+		// Missed scene - return background
+		return scene->background->evaluate(r.dir) * pathThroughput;
 	}
 
 	Colour pathTrace(Ray& r, Sampler* sampler)
 	{
 		Colour pathThroughput(1.0f, 1.0f, 1.0f);
-		return pathTrace(r, pathThroughput, 0, sampler, settings.canHitLight);
+		return pathTrace(r, pathThroughput, 0, sampler, 0, true);
 	}
 
 	// ###################################################################################################################
@@ -543,7 +543,8 @@ public:
 			{
 				return shadingData.bsdf->emit(shadingData, shadingData.wo);
 			}
-			return computeDirect(shadingData, sampler);
+			float lightPdf = 0.0f;
+			return computeDirect(shadingData, lightPdf, sampler);
 		}
 		return scene->background->evaluate(r.dir);
 	}
@@ -574,18 +575,45 @@ public:
 		return Colour(0.0f, 0.0f, 0.0f);
 	}
 
+	void drawPoint(Vec3 point, Colour col)
+	{
+		Vec3 dir = (point - scene->camera.origin).normalize();
+		bool isInFront = dir.dot(scene->camera.viewDirection) > 0.0f;
+
+		if (isInFront)
+		{
+			float px, py;
+			if (scene->camera.projectOntoCamera(point, px, py))
+				film->splat(px, py, col);
+		}
+	}
+
+	void lightDebug(Sampler* sampler)
+	{
+		LightSample light = scene->sampleLightPoint(sampler);
+
+		if (!light.isNull)
+			drawPoint(light.p, light.emitted / (light.pdf * light.pmf));
+	}
+
 	void render()
 	{
 		film->incrementSPP();
 
-		if (settings.algorithm == AL_INSTANT_RADIOSITY && settings.drawMode == DM_ALGORITHM)
+		if (settings.algorithm == AL_INSTANT_RADIOSITY && settings.render)
 			radiosityVplPass();
 
 		for (unsigned int y = 0; y < film->height; y++)
 		{
 			for (unsigned int x = 0; x < film->width; x++)
 			{
-				if (settings.drawMode != DM_ALGORITHM)
+				if (settings.drawMode == DM_LIGHTS)
+				{
+					lightDebug(samplers[0]);
+					continue;
+				}
+
+				if (!settings.render)
 				{
 					float px = x + 0.5f;
 					float py = y + 0.5f;
@@ -696,7 +724,13 @@ public:
 			{
 				for (unsigned int x = startx; x < endx; x++)
 				{
-					if (settings.drawMode != DM_ALGORITHM)
+					if (settings.drawMode == DM_LIGHTS)
+					{
+						lightDebug(samplers[id]);
+						continue;
+					}
+
+					if (!settings.render)
 					{
 						float px = x + 0.5f;
 						float py = y + 0.5f;
@@ -715,7 +749,6 @@ public:
 							col = direct(ray, samplers[id]);
 							break;
 						}
-
 						film->splat(px, py, col);
 					}
 					else
@@ -752,7 +785,7 @@ public:
 
 	void renderMT()
 	{
-		if (settings.debug)
+		if (settings.debug || settings.drawMode == DM_LIGHTS)
 		{
 			film->clear();
 			film->SPP = 1;
@@ -763,7 +796,7 @@ public:
 		tileCounter.store(0);
 
 		// check for radiosity vpl pass
-		if (settings.algorithm == AL_INSTANT_RADIOSITY && settings.drawMode == DM_ALGORITHM)
+		if (settings.algorithm == AL_INSTANT_RADIOSITY && settings.render)
 			radiosityVplPass();
 
 		// process all tiles
@@ -866,5 +899,46 @@ public:
 	void savePNG(std::string filename)
 	{
 		stbi_write_png(filename.c_str(), canvas->getWidth(), canvas->getHeight(), 3, canvas->getBackBuffer(), canvas->getWidth() * 3);
+	}
+
+	void cycleDrawMode()
+	{
+		if (settings.render)
+			return;
+
+		clear();
+
+		if (settings.drawMode == DM_ALBEDO)
+			settings.drawMode = DM_NORMALS;
+		else if (settings.drawMode == DM_NORMALS)
+			settings.drawMode = DM_DIRECT;
+		else if (settings.drawMode == DM_DIRECT)
+			settings.drawMode = DM_LIGHTS;
+		else
+			settings.drawMode = DM_ALBEDO;
+	}
+
+	void cycleAlgorithm()
+	{
+		if (!settings.render)
+			return;
+
+		clear();
+
+		if (settings.algorithm == AL_PATH_TRACE)
+			settings.algorithm = AL_LIGHT_TRACE;
+		else if (settings.algorithm == AL_LIGHT_TRACE)
+			settings.algorithm = AL_INSTANT_RADIOSITY;
+		else
+			settings.algorithm = AL_PATH_TRACE;
+
+		if (settings.adaptiveSampling && settings.algorithm != AL_PATH_TRACE)
+			settings.initSPP = settings.totalSPP;
+	}
+
+	void toggleRender()
+	{
+		clear();
+		settings.render = !settings.render;
 	}
 };

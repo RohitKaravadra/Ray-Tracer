@@ -128,8 +128,7 @@ public:
 	{
 		emission = _emission;
 	}
-	Colour emit(const ShadingData& shadingData, const Vec3& wi)
-	{
+	Colour emit(const ShadingData& shadingData, const Vec3& wi) {
 		return emission;
 	}
 	virtual float mask(const ShadingData& shadingData) = 0;
@@ -365,38 +364,43 @@ public:
 		intIOR = _intIOR;
 		extIOR = _extIOR;
 
-		eta = extIOR / intIOR;
+		eta = intIOR / extIOR;
 		invEta = 1.0f / eta;
 	}
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
+		Vec3 N = shadingData.sNormal;
 
 		// sample albedo
 		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv);
 
-		float cosThetaI = fabsf(localWo.z);
-		int transmitDir = localWo.z > 0.0f ? -1 : 1;
-
-		// Compute Fresnel reflection coefficient
-		float eta = transmitDir < 0 ? this->eta : invEta;
-		float F = ShadingHelper::fresnelDielectric(cosThetaI, eta);
+		float cosThetaI = localWo.z;
+		float eta = cosThetaI < 0.0f ? this->eta : this->invEta;
+		float F = ShadingHelper::fresnelDielectric(fabsf(cosThetaI), eta);
 
 		Vec3 wi;
-		if (F > sampler->next()) // Reflect
-		{
-			wi = Vec3(-localWo.x, -localWo.y, localWo.z);
+		float absCosThetaI = fabsf(cosThetaI);
+
+		if (sampler->next() < F) {
+			wi = Vec3(-localWo.x, -localWo.y, localWo.z);  // Reflect across Z
 			pdf = F;
-			reflectedColour = reflectedColour;
 		}
 		else // Refract
 		{
-			// Compute sin square theta using Snell's Law
-			float sin2ThetaT = eta * eta * (1.0f - cosThetaI * cosThetaI);
-			float cosThetaT = sqrtf(1.0f - sin2ThetaT);
+			float sin2ThetaI = std::max(0.0f, 1.0f - absCosThetaI * absCosThetaI);
+			float sin2ThetaT = eta * eta * sin2ThetaI;
 
-			wi = Vec3(-eta * localWo.x, -eta * localWo.y, transmitDir * cosThetaT);
+			float cosThetaT = sqrtf(1.0f - sin2ThetaT);
+			float dir = cosThetaI > 0.0f ? -1.0f : 1.0f;
+
+			wi = Vec3(
+				-localWo.x * eta,
+				-localWo.y * eta,
+				dir * cosThetaT
+			);
+			wi = wi.normalize(); // always normalize refracted ray
 
 			pdf = 1.0f - F;
 			reflectedColour = reflectedColour * eta * eta;
@@ -424,7 +428,7 @@ public:
 
 	bool isTwoSided()
 	{
-		return false;
+		return true;
 	}
 
 	float mask(const ShadingData& shadingData)
