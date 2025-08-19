@@ -69,10 +69,14 @@ public:
 	Vec3 maxP;
 	Vec3 minP;
 
+	int lightIndex; // Index of the light if this triangle is a light source
+
 	const float epsilon = 1e-8f;
 
 	void init(Vertex v0, Vertex v1, Vertex v2, unsigned int _materialIndex)
 	{
+		lightIndex = -1; // Default to no light
+
 		materialIndex = _materialIndex;
 
 		vertices[0] = v0;

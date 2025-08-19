@@ -25,15 +25,15 @@ struct LightSample
 	float pdf;			// probability density function value for the sample
 	float pmf;			// probability mass function value for the sample
 
-	Colour emitted;		// emission colour of the light sample
+	Color emitted;		// emission colour of the light sample
 };
 
 class Light
 {
 public:
-	virtual Vec3 sample(Sampler* sampler, Colour& emittedColour, float& pdf) = 0;
-	virtual Colour evaluate(const Vec3& wi) = 0;
-	virtual float PDF(const ShadingData& shadingData, const Vec3& wi) = 0;
+	virtual Vec3 sample(Sampler* sampler, Color& emittedColour, float& pdf) = 0;
+	virtual Color evaluate(const Vec3& wi) = 0;
+	virtual float PDF(const Vec3& wi) = 0;
 	virtual bool isArea() = 0;
 	virtual Vec3 normal(const Vec3& wi) = 0;
 	virtual float totalIntegratedPower() = 0;
@@ -45,23 +45,29 @@ class AreaLight : public Light
 {
 public:
 	Triangle* triangle = NULL;
-	Colour emission;
+	Color emission;
 
-	Vec3 sample(Sampler* sampler, Colour& emittedColour, float& pdf) override
+	void init(Triangle* _triangle, int index, Color _emission)
+	{
+		triangle = _triangle;
+		triangle->lightIndex = index; // Set the light index for the triangle
+		emission = _emission;
+	}
+	Vec3 sample(Sampler* sampler, Color& emittedColour, float& pdf) override
 	{
 		emittedColour = emission;
 		return triangle->sample(sampler, pdf);
 	}
-	Colour evaluate(const Vec3& wi)
+	Color evaluate(const Vec3& wi)
 	{
 		if (Dot(wi, triangle->gNormal()) < 0)
 		{
 			return emission;
 		}
-		return Colour(0.0f, 0.0f, 0.0f);
+		return Color(0.0f, 0.0f, 0.0f);
 	}
 
-	float PDF(const ShadingData& shadingData, const Vec3& wi)
+	float PDF(const Vec3& wi) override
 	{
 		return 1.0f / triangle->area;
 	}
@@ -100,23 +106,23 @@ public:
 class BackgroundColour : public Light
 {
 public:
-	Colour emission;
-	BackgroundColour(Colour _emission)
+	Color emission;
+	BackgroundColour(Color _emission)
 	{
 		emission = _emission;
 	}
-	Vec3 sample(Sampler* sampler, Colour& reflectedColour, float& pdf) override
+	Vec3 sample(Sampler* sampler, Color& reflectedColour, float& pdf) override
 	{
 		Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
 		pdf = SamplingDistributions::uniformSpherePDF(wi);
 		reflectedColour = emission;
 		return wi;
 	}
-	Colour evaluate(const Vec3& wi)
+	Color evaluate(const Vec3& wi)
 	{
 		return emission;
 	}
-	float PDF(const ShadingData& shadingData, const Vec3& wi)
+	float PDF(const Vec3& wi)
 	{
 		return SamplingDistributions::uniformSpherePDF(wi);
 	}
@@ -343,7 +349,7 @@ public:
 		tabDist.init(env);
 	}
 
-	Vec3 sampleSpherical(Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sampleSpherical(Sampler* sampler, Color& reflectedColour, float& pdf)
 	{
 		// Assignment: Update this code to importance sampling lighting based on luminance of each pixel
 		Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
@@ -352,7 +358,7 @@ public:
 		return wi;
 	}
 
-	Vec3 sampleTabulated(Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sampleTabulated(Sampler* sampler, Color& reflectedColour, float& pdf)
 	{
 		float u, v;
 		Vec3 wi = tabDist.sample(sampler, u, v, pdf);
@@ -360,13 +366,13 @@ public:
 		return wi;
 	}
 
-	Vec3 sample(Sampler* sampler, Colour& reflectedColour, float& pdf) override
+	Vec3 sample(Sampler* sampler, Color& reflectedColour, float& pdf) override
 	{
 		return useTabulated ? sampleTabulated(sampler, reflectedColour, pdf) :
 			sampleSpherical(sampler, reflectedColour, pdf);
 	}
 
-	Colour evaluate(const Vec3& wi)
+	Color evaluate(const Vec3& wi)
 	{
 		float u = atan2f(wi.z, wi.x);
 		u = (u < 0.0f) ? u + (2.0f * M_PI) : u;
@@ -376,7 +382,7 @@ public:
 		return env->sample(u, v);
 	}
 
-	float PDF(const ShadingData& shadingData, const Vec3& wi)
+	float PDF(const Vec3& wi)
 	{
 		if (!useTabulated)
 			return SamplingDistributions::uniformHemispherePDF(wi);

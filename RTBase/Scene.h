@@ -103,8 +103,8 @@ public:
 			if (materials[triangles[i].materialIndex]->isLight())
 			{
 				AreaLight* light = new AreaLight();
-				light->triangle = &triangles[i];
-				light->emission = materials[triangles[i].materialIndex]->emission;
+				light->init(&triangles[i], lights.size(),
+					materials[triangles[i].materialIndex]->emission);
 				lights.push_back(light);
 			}
 		}
@@ -170,6 +170,14 @@ public:
 		return sample;
 	}
 
+	float getLightPdf(const int& lightIndex, const Vec3& wi) const
+	{
+		if (lightIndex < 0 || lightIndex >= lights.size())
+			return 0.0f;
+
+		return lights[lightIndex]->PDF(wi);
+	}
+
 	// Do not modify any code below this line
 	void init(std::vector<Triangle> meshTriangles, std::vector<BSDF*> meshMaterials, Light* _background)
 	{
@@ -199,7 +207,7 @@ public:
 		ray.init(p1 + (dir * EPSILON), dir);
 		return bvh.traverseVisible(ray, maxT);
 	}
-	Colour emit(Triangle* light, ShadingData shadingData, Vec3 wi)
+	Color emit(Triangle* light, ShadingData shadingData, Vec3 wi)
 	{
 		return materials[light->materialIndex]->emit(shadingData, wi);
 	}
@@ -208,6 +216,7 @@ public:
 		ShadingData shadingData = {};
 		if (intersection.t < FLT_MAX)
 		{
+			shadingData.lightIndex = triangles[intersection.ID].lightIndex;
 			shadingData.x = ray.at(intersection.t);
 			shadingData.gNormal = triangles[intersection.ID].gNormal();
 			triangles[intersection.ID].interpolateAttributes(intersection.alpha, intersection.beta, intersection.gamma, shadingData.sNormal, shadingData.tu, shadingData.tv);

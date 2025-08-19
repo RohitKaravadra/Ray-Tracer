@@ -19,7 +19,7 @@ constexpr const T& clamp(const T& value, const T& low, const T& high)
 	return (value < low) ? low : (value > high) ? high : value;
 }
 
-class Colour
+class Color
 {
 public:
 	union
@@ -31,14 +31,17 @@ public:
 		float rgb[3];
 	};
 
-	Colour() { r = 0; g = 0; b = 0; }
-	Colour(float _r, float _g, float _b)
+	Color() { r = 0; g = 0; b = 0; }
+	Color(float a) {
+		r = g = b = a;
+	}
+	Color(float _r, float _g, float _b)
 	{
 		r = _r;
 		g = _g;
 		b = _b;
 	}
-	Colour(unsigned char _r, unsigned char _g, unsigned char _b, unsigned char _a)
+	Color(unsigned char _r, unsigned char _g, unsigned char _b, unsigned char _a)
 	{
 		r = (float)_r / 255.0f;
 		g = (float)_g / 255.0f;
@@ -50,49 +53,57 @@ public:
 		cg = (unsigned char)(g * 255);
 		cb = (unsigned char)(b * 255);
 	}
-	Colour operator+(const Colour& colour) const
+	Color operator+(const Color& colour) const
 	{
-		Colour c;
+		Color c;
 		c.r = r + colour.r;
 		c.g = g + colour.g;
 		c.b = b + colour.b;
 		return c;
 	}
-	Colour operator-(const Colour& colour) const
+	Color operator-(const Color& colour) const
 	{
-		Colour c;
+		Color c;
 		c.r = r - colour.r;
 		c.g = g - colour.g;
 		c.b = b - colour.b;
 		return c;
 	}
-	Colour operator*(const Colour& colour) const
+	Color operator*(const Color& colour) const
 	{
-		Colour c;
+		Color c;
 		c.r = r * colour.r;
 		c.g = g * colour.g;
 		c.b = b * colour.b;
 		return c;
 	}
-	Colour operator/(const Colour& colour) const
+	Color operator*=(const Color& colour) const
 	{
-		Colour c;
+		Color c;
+		c.r = r * colour.r;
+		c.g = g * colour.g;
+		c.b = b * colour.b;
+		return c;
+	}
+	Color operator/(const Color& colour) const
+	{
+		Color c;
 		c.r = r / colour.r;
 		c.g = g / colour.g;
 		c.b = b / colour.b;
 		return c;
 	}
-	Colour operator*(const float v) const
+	Color operator*(const float v) const
 	{
-		Colour c;
+		Color c;
 		c.r = r * v;
 		c.g = g * v;
 		c.b = b * v;
 		return c;
 	}
-	Colour operator/(const float v) const
+	Color operator/(const float v) const
 	{
-		Colour c;
+		Color c;
 		c.r = r / v;
 		c.g = g / v;
 		c.b = b / v;
@@ -103,10 +114,10 @@ public:
 		return ((0.2126f * r) + (0.7152f * g) + (0.0722f * b));
 	}
 
-	Colour normalize()
+	Color normalize()
 	{
 		float l = 1.0f / sqrtf((r * r) + (g * g) + (b * b));
-		return Colour(r * l, g * l, b * l);
+		return Color(r * l, g * l, b * l);
 	}
 };
 

@@ -23,7 +23,7 @@ enum IMAGE_FILTER
 class Texture
 {
 public:
-	Colour* texels;
+	Color* texels;
 	float* alpha;
 	int width;
 	int height;
@@ -33,8 +33,8 @@ public:
 		width = 1;
 		height = 1;
 		channels = 3;
-		texels = new Colour[1];
-		texels[0] = Colour(1.0f, 1.0f, 1.0f);
+		texels = new Color[1];
+		texels[0] = Color(1.0f, 1.0f, 1.0f);
 	}
 	void load(std::string filename)
 	{
@@ -47,10 +47,10 @@ public:
 				loadDefault();
 				return;
 			}
-			texels = new Colour[width * height];
+			texels = new Color[width * height];
 			for (int i = 0; i < (width * height); i++)
 			{
-				texels[i] = Colour(textureData[i * channels], textureData[(i * channels) + 1], textureData[(i * channels) + 2]);
+				texels[i] = Color(textureData[i * channels], textureData[(i * channels) + 1], textureData[(i * channels) + 2]);
 			}
 			stbi_image_free(textureData);
 			return;
@@ -61,10 +61,10 @@ public:
 			loadDefault();
 			return;
 		}
-		texels = new Colour[width * height];
+		texels = new Color[width * height];
 		for (int i = 0; i < (width * height); i++)
 		{
-			texels[i] = Colour(textureData[i * channels] / 255.0f, textureData[(i * channels) + 1] / 255.0f, textureData[(i * channels) + 2] / 255.0f);
+			texels[i] = Color(textureData[i * channels] / 255.0f, textureData[(i * channels) + 1] / 255.0f, textureData[(i * channels) + 2] / 255.0f);
 		}
 		if (channels == 4)
 		{
@@ -76,9 +76,9 @@ public:
 		}
 		stbi_image_free(textureData);
 	}
-	Colour sample(const float tu, const float tv) const
+	Color sample(const float tu, const float tv) const
 	{
-		Colour tex;
+		Color tex;
 		float u = std::max(0.0f, fabsf(tu)) * width;
 		float v = std::max(0.0f, fabsf(tv)) * height;
 		int x = (int)floorf(u);
@@ -91,7 +91,7 @@ public:
 		float w3 = frac_u * frac_v;
 		x = x % width;
 		y = y % height;
-		Colour s[4];
+		Color s[4];
 		s[0] = texels[y * width + x];
 		s[1] = texels[y * width + ((x + 1) % width)];
 		s[2] = texels[((y + 1) % height) * width + x];
@@ -296,7 +296,7 @@ class Film
 	}
 
 public:
-	Colour* film;
+	Color* film;
 	unsigned int width;
 	unsigned int height;
 	int SPP;
@@ -315,7 +315,7 @@ public:
 		delete filter;
 	}
 
-	void splat(const float x, const float y, const Colour& L)
+	void splat(const float x, const float y, const Color& L)
 	{
 		float filterWeights[25]; // Storage to cache weights
 		unsigned int indices[25]; // Store indices to minimize computations 
@@ -363,7 +363,7 @@ public:
 	// Tonemap the pixel
 	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, int spp, TONEMAP toneMap = TM_LINEAR)
 	{
-		Colour pixel = film[(y * width) + x] / (float)spp;
+		Color pixel = film[(y * width) + x] / (float)spp;
 
 		float fr = std::max(pixel.r, 0.0f);
 		float fg = std::max(pixel.g, 0.0f);
@@ -389,14 +389,14 @@ public:
 	{
 		width = _width;
 		height = _height;
-		film = new Colour[width * height];
+		film = new Color[width * height];
 		clear();
 		setFilter(_filter);
 	}
 
 	void clear()
 	{
-		memset(film, 0, width * height * sizeof(Colour));
+		memset(film, 0, width * height * sizeof(Color));
 		SPP = 0;
 	}
 
@@ -407,7 +407,7 @@ public:
 
 	void save(std::string filename)
 	{
-		Colour* hdrpixels = new Colour[width * height];
+		Color* hdrpixels = new Color[width * height];
 		for (unsigned int i = 0; i < (width * height); i++)
 		{
 			hdrpixels[i] = film[i] / (float)SPP;

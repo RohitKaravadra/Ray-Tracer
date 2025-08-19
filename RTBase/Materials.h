@@ -20,6 +20,7 @@ public:
 	Frame frame;
 	BSDF* bsdf;
 	float t;
+	int lightIndex; // Index of the light if this is a light source
 	ShadingData() {}
 	ShadingData(Vec3 _x, Vec3 n)
 	{
@@ -31,15 +32,15 @@ public:
 };
 
 // Physical Constants
-static const Colour Gold_Eta(0.17f, 0.35f, 1.5f);
-static const Colour Silver_Eta(0.14f, 0.16f, 0.13f);
-static const Colour Copper_Eta(0.26f, 0.67f, 1.1f);
-static const Colour Aluminium_Eta(1.5f, 0.9f, 0.6f);
+static const Color Gold_Eta(0.17f, 0.35f, 1.5f);
+static const Color Silver_Eta(0.14f, 0.16f, 0.13f);
+static const Color Copper_Eta(0.26f, 0.67f, 1.1f);
+static const Color Aluminium_Eta(1.5f, 0.9f, 0.6f);
 
-static const Colour Gold_K(3.1f, 2.7f, 1.9f);
-static const Colour Silver_K(4.1f, 2.3f, 3.1f);
-static const Colour Copper_K(3.7f, 2.4f, 2.4f);
-static const Colour Aluminium_K(7.0f, 6.0f, 4.7f);
+static const Color Gold_K(3.1f, 2.7f, 1.9f);
+static const Color Silver_K(4.1f, 2.3f, 3.1f);
+static const Color Copper_K(3.7f, 2.4f, 2.4f);
+static const Color Aluminium_K(7.0f, 6.0f, 4.7f);
 
 class ShadingHelper
 {
@@ -64,19 +65,19 @@ public:
 		return  (fParl * fParl + fPerp * fPerp) * 0.5f;
 	}
 
-	static Colour fresnelConductor(float cosTheta, Colour ior, Colour k)
+	static Color fresnelConductor(float cosTheta, Color ior, Color k)
 	{
 		cosTheta = clamp(cosTheta, 0.0f, 1.0f);
 
-		Colour eta2k2 = ior * ior + k * k;
+		Color eta2k2 = ior * ior + k * k;
 
-		Colour cos2Theta = Colour(1.0f, 1.0f, 1.0f) * cosTheta * cosTheta;
-		Colour sin2Theta = Colour(1.0f, 1.0f, 1.0f) * (1.0f - cosTheta * cosTheta);
+		Color cos2Theta = Color(1.0f, 1.0f, 1.0f) * cosTheta * cosTheta;
+		Color sin2Theta = Color(1.0f, 1.0f, 1.0f) * (1.0f - cosTheta * cosTheta);
 
 		// Compute the parallel and perpendicular Fresnel reflection coefficients
-		Colour fParl = (eta2k2 * cos2Theta - ior * 2 * cosTheta + sin2Theta) /
+		Color fParl = (eta2k2 * cos2Theta - ior * 2 * cosTheta + sin2Theta) /
 			(eta2k2 * cos2Theta + ior * 2 * cosTheta + sin2Theta);
-		Colour fPerp = (eta2k2 - ior * 2 * cosTheta + cos2Theta) /
+		Color fPerp = (eta2k2 - ior * 2 * cosTheta + cos2Theta) /
 			(eta2k2 + ior * 2 * cosTheta + cos2Theta);
 
 		// Return the averaged Fresnel term
@@ -114,9 +115,9 @@ public:
 class BSDF
 {
 public:
-	Colour emission;
-	virtual Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) = 0;
-	virtual Colour evaluate(const ShadingData& shadingData, const Vec3& wi) = 0;
+	Color emission;
+	virtual Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf) = 0;
+	virtual Color evaluate(const ShadingData& shadingData, const Vec3& wi) = 0;
 	virtual float PDF(const ShadingData& shadingData, const Vec3& wi) = 0;
 	virtual bool isPureSpecular() = 0;
 	virtual bool isTwoSided() = 0;
@@ -124,11 +125,11 @@ public:
 	{
 		return emission.Lum() > 0 ? true : false;
 	}
-	void addLight(Colour _emission)
+	void addLight(Color _emission)
 	{
 		emission = _emission;
 	}
-	Colour emit(const ShadingData& shadingData, const Vec3& wi) {
+	Color emit(const ShadingData& shadingData, const Vec3& wi) {
 		return emission;
 	}
 	virtual float mask(const ShadingData& shadingData) = 0;
@@ -144,14 +145,14 @@ public:
 	{
 		albedo = _albedo;
 	}
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
 	{
 		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
 		pdf = wi.z / M_PI;
 		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
 		return shadingData.frame.toWorld(wi);
 	}
-	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
+	Color evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
 		return albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
 	}
@@ -181,15 +182,15 @@ public:
 	Texture* albedo;
 
 	// Physical Constants for Fresnel
-	const Colour eta = Aluminium_Eta;
-	const Colour k = Aluminium_K;
+	const Color eta = Aluminium_Eta;
+	const Color k = Aluminium_K;
 
 	MirrorBSDF() = default;
 	MirrorBSDF(Texture* _albedo)
 	{
 		albedo = _albedo;
 	}
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 
@@ -197,7 +198,7 @@ public:
 		Vec3 wi(-localWo.x, -localWo.y, localWo.z);
 
 		// Compute Fresnel reflection coefficient
-		Colour F = ShadingHelper::fresnelConductor(fabs(localWo.z), eta, k);
+		Color F = ShadingHelper::fresnelConductor(fabs(localWo.z), eta, k);
 
 		// sample albedo
 		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * F / fabs(wi.z);
@@ -205,7 +206,7 @@ public:
 
 		return shadingData.frame.toWorld(wi);
 	}
-	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
+	Color evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Replace this with Mirror evaluation code
 		return albedo->sample(shadingData.tu, shadingData.tv) / fabsf(shadingData.frame.toLocal(wi).z);
@@ -234,12 +235,12 @@ class ConductorBSDF : public BSDF
 {
 public:
 	Texture* albedo;
-	Colour eta;
-	Colour k;
+	Color eta;
+	Color k;
 	float alpha;
 	ConductorBSDF() = default;
 
-	ConductorBSDF(Texture* _albedo, Colour _eta, Colour _k, float roughness)
+	ConductorBSDF(Texture* _albedo, Color _eta, Color _k, float roughness)
 	{
 		albedo = _albedo;
 		eta = _eta;
@@ -247,7 +248,7 @@ public:
 		alpha = 1.62142f * sqrtf(roughness);
 	}
 
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 
@@ -262,7 +263,7 @@ public:
 			// reflected direction
 			wi = Vec3(-localWo.x, -localWo.y, localWo.z);
 
-			Colour F = ShadingHelper::fresnelConductor(fabsf(localWo.z), eta, k);
+			Color F = ShadingHelper::fresnelConductor(fabsf(localWo.z), eta, k);
 			reflectedColour = reflectedColour * F / fabs(wi.z);
 			pdf = 1.0f;
 		}
@@ -284,7 +285,7 @@ public:
 			float ggx = ShadingHelper::Gggx(wi, localWo, alpha);					// shadowing term
 			float D = ShadingHelper::Dggx(wm, alpha);								// distribution term
 
-			Colour F = ShadingHelper::fresnelConductor(fabsf(wi.dot(wm)), eta, k);	// Fresnel term
+			Color F = ShadingHelper::fresnelConductor(fabsf(wi.dot(wm)), eta, k);	// Fresnel term
 
 			// compute the reflected colour
 			reflectedColour = reflectedColour * F * ggx * D / (4 * fabs(localWo.z) * fabs(wi.z));
@@ -296,7 +297,7 @@ public:
 		return shadingData.frame.toWorld(wi);
 	}
 
-	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
+	Color evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// treat as mirror
 		if (alpha < EPSILON)
@@ -307,7 +308,7 @@ public:
 
 		Vec3 wm = (localWo + localWi).normalize();					// microfacet normal
 
-		Colour F = ShadingHelper::fresnelConductor(fabsf(localWi.dot(wm)), eta, k);		// Fresnel term
+		Color F = ShadingHelper::fresnelConductor(fabsf(localWi.dot(wm)), eta, k);		// Fresnel term
 
 		float D = ShadingHelper::Dggx(wm, alpha);					// distribution term
 		float ggx = ShadingHelper::Gggx(localWi, localWo, alpha);	// shadowing term
@@ -368,7 +369,7 @@ public:
 		invEta = 1.0f / eta;
 	}
 
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 		Vec3 N = shadingData.sNormal;
@@ -403,17 +404,16 @@ public:
 			wi = wi.normalize(); // always normalize refracted ray
 
 			pdf = 1.0f - F;
-			reflectedColour = reflectedColour * eta * eta;
 		}
 
 		reflectedColour = reflectedColour * pdf / fabsf(wi.z);
 		return shadingData.frame.toWorld(wi);
 	}
 
-	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
+	Color evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Replace this with Glass evaluation code
-		return Colour(0.0f, 0.0f, 0.0f);
+		return Color(0.0f, 0.0f, 0.0f);
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
@@ -452,7 +452,7 @@ public:
 		extIOR = _extIOR;
 		alpha = 1.62142f * sqrtf(roughness);
 	}
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
 	{
 		// Replace this with Dielectric sampling code
 		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
@@ -461,7 +461,7 @@ public:
 		wi = shadingData.frame.toWorld(wi);
 		return wi;
 	}
-	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
+	Color evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Replace this with Dielectric evaluation code
 		return albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
@@ -505,7 +505,7 @@ public:
 		B = (0.45 * sigma * sigma) / (sigma * sigma + 0.09f);
 	}
 
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 
@@ -526,7 +526,7 @@ public:
 		return shadingData.frame.toWorld(wi);
 	}
 
-	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
+	Color evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 		Vec3 localWi = shadingData.frame.toLocal(wi);
@@ -589,10 +589,10 @@ public:
 		e = (2.0f / SQ(std::max(alpha, 0.001f))) - 2.0f;
 	}
 
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
-		Colour col = albedo->sample(shadingData.tu, shadingData.tv);
+		Color col = albedo->sample(shadingData.tu, shadingData.tv);
 
 		Vec3 wi, wr(-localWo.x, -localWo.y, localWo.z);
 
@@ -629,12 +629,12 @@ public:
 		return shadingData.frame.toWorld(wi);
 	}
 
-	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
+	Color evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 		Vec3 localWi = shadingData.frame.toLocal(wi);
 
-		Colour col = albedo->sample(shadingData.tu, shadingData.tv);
+		Color col = albedo->sample(shadingData.tu, shadingData.tv);
 
 		float F = ShadingHelper::fresnelDielectric(std::abs(localWi.z), eta);
 
@@ -685,12 +685,12 @@ class LayeredBSDF : public BSDF
 {
 public:
 	BSDF* base;
-	Colour sigmaa;
+	Color sigmaa;
 	float thickness;
 	float intIOR;
 	float extIOR;
 	LayeredBSDF() = default;
-	LayeredBSDF(BSDF* _base, Colour _sigmaa, float _thickness, float _intIOR, float _extIOR)
+	LayeredBSDF(BSDF* _base, Color _sigmaa, float _thickness, float _intIOR, float _extIOR)
 	{
 		base = _base;
 		sigmaa = _sigmaa;
@@ -698,12 +698,12 @@ public:
 		intIOR = _intIOR;
 		extIOR = _extIOR;
 	}
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
 	{
 		// Add code to include layered sampling
 		return base->sample(shadingData, sampler, reflectedColour, pdf);
 	}
-	Colour evaluate(const ShadingData& shadingData, const Vec3& wi)
+	Color evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Add code for evaluation of layer
 		return base->evaluate(shadingData, wi);

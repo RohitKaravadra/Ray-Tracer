@@ -262,8 +262,8 @@ void loadInstance(std::string sceneName, std::vector<Triangle>& meshTriangles, s
 	if (instance.material.find("bsdf").getValue("") == "conductor")
 	{
 		std::string filename = sceneName + "/" + instance.material.find("reflectance").getValue("");
-		Colour eta;
-		Colour k;
+		Color eta;
+		Color k;
 		instance.material.find("eta").getValuesAsVector3(eta.r, eta.g, eta.b);
 		instance.material.find("k").getValuesAsVector3(k.r, k.g, k.b);
 		float roughness = instance.material.find("roughness").getValue(1.0f);
@@ -272,14 +272,14 @@ void loadInstance(std::string sceneName, std::vector<Triangle>& meshTriangles, s
 	}
 	if (instance.material.find("emission").getValue("") != "")
 	{
-		Colour emission;
+		Color emission;
 		instance.material.find("emission").getValuesAsVector3(emission.r, emission.g, emission.b);
 		material->addLight(emission);
 	}
 	if (instance.material.find("coatingThickness").getValue(0) > 0)
 	{
 		BSDF* base = material;
-		Colour sigmaa;
+		Color sigmaa;
 		instance.material.find("coatingSigmaA").getValuesAsVector3(sigmaa.r, sigmaa.g, sigmaa.b);
 		float intIOR = instance.material.find("coatingIntIOR").getValue(1.33f);
 		float extIOR = instance.material.find("coatingExtIOR").getValue(1.0f);
@@ -379,7 +379,7 @@ Scene* loadScene(std::string sceneName, RTCamera& viewcamera)
 		background = new EnvironmentMap(env);
 	} else
 	{
-		background = new BackgroundColour(Colour(0.0f, 0.0f, 0.0f));
+		background = new BackgroundColour(Color(0.0f, 0.0f, 0.0f));
 	}
 	scene->init(meshTriangles, meshMaterials, background);
 	viewcamera.movespeed = (scene->bounds.max - scene->bounds.min).length() * 0.05f;

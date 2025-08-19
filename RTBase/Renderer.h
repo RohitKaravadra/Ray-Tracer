@@ -19,7 +19,7 @@
 struct VPL
 {
 	ShadingData shadingData;
-	Colour Le;
+	Color Le;
 };
 
 class RayTracer
@@ -121,7 +121,7 @@ public:
 
 	// RADIOSITY #####################################################################################################
 
-	void VPLTracePath(Ray& r, Colour pathThroughput, Colour Le, Sampler* sampler, std::vector<VPL>& vplList, int depth = 0)
+	void VPLTracePath(Ray& r, Color pathThroughput, Color Le, Sampler* sampler, std::vector<VPL>& vplList, int depth = 0)
 	{
 		// Max recursion depth check
 		if (depth >= settings.maxBounces)
@@ -138,7 +138,7 @@ public:
 				return;
 
 			// Sample new direction
-			Colour bsdf;
+			Color bsdf;
 			float pdf;
 			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, bsdf, pdf);
 
@@ -191,7 +191,7 @@ public:
 			Vec3 nLight = light->normal(wi);
 
 			float cosTheta = Dot(wi, nLight);
-			Colour Le = light->evaluate(-wi) * cosTheta / (pmf * pdfPos);
+			Color Le = light->evaluate(-wi) * cosTheta / (pmf * pdfPos);
 
 			VPL vpl;
 			vpl.shadingData = ShadingData(p, nLight);
@@ -201,18 +201,18 @@ public:
 			vplList.emplace_back(vpl);
 
 			Ray ray(p, wi);
-			Colour pathThroughput(1.0f, 1.0f, 1.0f);
+			Color pathThroughput(1.0f, 1.0f, 1.0f);
 
 			VPLTracePath(ray, pathThroughput, Le, sampler, vplList);
 		}
 	}
 
-	Colour radiosityComputeDirect(ShadingData shadingData, Sampler* sampler)
+	Color radiosityComputeDirect(ShadingData shadingData, Sampler* sampler)
 	{
 		// Is surface is specular we cannot computing direct lighting
 		if (shadingData.bsdf->isPureSpecular() == true)
 		{
-			return Colour(0.0f, 0.0f, 0.0f);
+			return Color(0.0f, 0.0f, 0.0f);
 		}
 
 		if (shadingData.bsdf->isLight())
@@ -220,7 +220,7 @@ public:
 			return shadingData.bsdf->emit(shadingData, shadingData.wo);
 		}
 
-		Colour accumulated(0.0f, 0.0f, 0.0f);
+		Color accumulated(0.0f, 0.0f, 0.0f);
 
 		unsigned int total = vpls.size();
 		for (unsigned int i = 0; i < total; i++)
@@ -258,7 +258,7 @@ public:
 		return false;
 	}
 
-	Colour radiosityLightPass(Ray r, Sampler* sampler)
+	Color radiosityLightPass(Ray r, Sampler* sampler)
 	{
 		// Traverse the scene to find an intersection
 		IntersectionData intersection = scene->traverse(r);
@@ -269,7 +269,7 @@ public:
 		{
 			float i;
 			if (radiosityDebug(shadingData.x, i))
-				return Colour(1.0f, 0.0f, 0.0f) * (1.0f - i) + Colour(1.0f, 1.0f, 0.0f) * i;
+				return Color(1.0f, 0.0f, 0.0f) * (1.0f - i) + Color(1.0f, 1.0f, 0.0f) * i;
 		}
 
 		return shadingData.t < FLT_MAX ? radiosityComputeDirect(shadingData, sampler) :
@@ -304,7 +304,7 @@ public:
 
 	// LIGHT TRACING #####################################################################################################
 
-	void connectToCamera(Vec3 p, Vec3 n, Colour col)
+	void connectToCamera(Vec3 p, Vec3 n, Color col)
 	{
 		float x, y;
 		// project point on camera if possible
@@ -332,7 +332,7 @@ public:
 		}
 	}
 
-	void lightTracePath(Ray& r, Colour pathThroughput, Colour Le, Sampler* sampler, int depth = 0)
+	void lightTracePath(Ray& r, Color pathThroughput, Color Le, Sampler* sampler, int depth = 0)
 	{
 		// Max recursion depth check
 		if (depth >= settings.maxBounces)
@@ -350,7 +350,7 @@ public:
 
 			// connect to camera and draw pixel
 			Vec3 wi = (scene->camera.origin - shadingData.x).normalize();
-			Colour col = pathThroughput * shadingData.bsdf->evaluate(shadingData, wi) * Le;
+			Color col = pathThroughput * shadingData.bsdf->evaluate(shadingData, wi) * Le;
 			connectToCamera(shadingData.x, shadingData.sNormal, col);
 
 			// Russian Roulette for termination
@@ -360,7 +360,7 @@ public:
 			pathThroughput = pathThroughput / russianRouletteProbability;
 
 			// Sample new direction
-			Colour bsdf;
+			Color bsdf;
 			float pdf;
 			wi = shadingData.bsdf->sample(shadingData, sampler, bsdf, pdf);
 
@@ -393,7 +393,7 @@ public:
 		Vec3 nLight = light->normal(wi);
 
 		float cosTheta = Dot(wi, nLight);
-		Colour Le = light->evaluate(-wi) / (pmf * pdfPos);
+		Color Le = light->evaluate(-wi) / (pmf * pdfPos);
 
 		// connect to camera to draw light
 		connectToCamera(p, nLight, Le);
@@ -403,7 +403,7 @@ public:
 			Le = Le * cosTheta;
 
 		Ray ray(p, wi);
-		Colour pathThroughput(1.0f, 1.0f, 1.0f);
+		Color pathThroughput(1.0f, 1.0f, 1.0f);
 
 		lightTracePath(ray, pathThroughput, Le, sampler);
 	}
@@ -412,7 +412,7 @@ public:
 
 	// PATH TRACE #####################################################################################################
 
-	float powerHeuristic(float pdfA, float pdfB)
+	inline float powerHeuristic(float pdfA, float pdfB)
 	{
 		float a2 = pdfA * pdfA;
 		float b2 = pdfB * pdfB;
@@ -423,19 +423,17 @@ public:
 		return a2 / (a2 + b2);
 	}
 
-	Colour computeDirect(ShadingData shadingData, float& lightPdf, Sampler* sampler)
+	Color computeDirect(ShadingData shadingData, Sampler* sampler)
 	{
 		if (shadingData.bsdf->isPureSpecular())
 		{
-			return Colour(0.0f, 0.0f, 0.0f);
+			return Color(0.0f, 0.0f, 0.0f);
 		}
 
 		// Light sampling part
 		LightSample light = scene->sampleLightPoint(sampler);
 		if (light.isNull)
-			return Colour(0.0f, 0.0f, 0.0f);
-
-		lightPdf = light.pdf * light.pmf;
+			return Color(0.0f, 0.0f, 0.0f);
 
 		Vec3 wi = light.p - shadingData.x;
 		float lengthSq = light.isArea ? wi.lengthSq() : 1.0f;
@@ -452,19 +450,21 @@ public:
 
 		if (gTerm > 0.0f && scene->visible(shadingData.x, light.p))
 		{
-			Colour bsdfVal = shadingData.bsdf->evaluate(shadingData, wi);
+			Color bsdfVal = shadingData.bsdf->evaluate(shadingData, wi);
 			float bsdfPdf = shadingData.bsdf->PDF(shadingData, wi);
 
-			// Balance heuristic for MIS
-			float misWeight = powerHeuristic(lightPdf, bsdfPdf);
+			float lightPdf = light.pdf * light.pmf;
 
-			return (light.emitted * bsdfVal * gTerm * misWeight) / lightPdf;
+			// Balance heuristic for MIS
+			float misWeight = powerHeuristic(light.pdf, bsdfPdf);
+
+			return (light.emitted * bsdfVal * gTerm * misWeight) / (lightPdf);
 		}
 
-		return Colour(0.0f, 0.0f, 0.0f);
+		return Color(0.0f, 0.0f, 0.0f);
 	}
 
-	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, float misWeight, bool canHitLight)
+	Color pathTrace(Ray& r, Color& pathThroughput, int depth, Sampler* sampler, float prevBsdfPdf, bool canHitLight)
 	{
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
@@ -474,17 +474,22 @@ public:
 			// Handle light hit
 			if (shadingData.bsdf->isLight())
 			{
-				pathThroughput = pathThroughput * shadingData.bsdf->emit(shadingData, shadingData.wo);
+				pathThroughput = pathThroughput * shadingData.bsdf->emit(shadingData, r.dir);
 
+				// if last bsdf was pure specular, we cannot use MIS
 				if (canHitLight)
 					return pathThroughput;
+
+				float lightPdf = scene->getLightPdf(shadingData.lightIndex, r.dir);
+
+				// MIS weight calculation
+				float misWeight = powerHeuristic(lightPdf, prevBsdfPdf);
 
 				return pathThroughput * misWeight;
 			}
 
 			// Direct lighting (with MIS)
-			float lightPdf = 0.0f;
-			Colour direct = pathThroughput * computeDirect(shadingData, lightPdf, sampler);
+			Color direct = pathThroughput * computeDirect(shadingData, sampler);
 
 			// Russian roulette termination
 			if (depth >= settings.maxBounces)
@@ -500,7 +505,7 @@ public:
 			pathThroughput = pathThroughput / rrProbability;
 
 			// Sample BSDF for next path segment
-			Colour bsdf;
+			Color bsdf;
 			float bsdfPdf;
 			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, bsdf, bsdfPdf);
 
@@ -511,11 +516,8 @@ public:
 			// Spawn next ray
 			r.init(shadingData.x + (wi * EPSILON), wi);
 
-			//calculate MIS weight
-			misWeight = powerHeuristic(bsdfPdf, lightPdf);
-
 			// Indirect lighting (recursive call)
-			Colour indirect = pathTrace(r, pathThroughput, depth + 1, sampler, misWeight, shadingData.bsdf->isPureSpecular());
+			Color indirect = pathTrace(r, pathThroughput, depth + 1, sampler, bsdfPdf, shadingData.bsdf->isPureSpecular());
 
 			// Combine direct and indirect lighting
 			return direct + indirect;
@@ -525,15 +527,15 @@ public:
 		return scene->background->evaluate(r.dir) * pathThroughput;
 	}
 
-	Colour pathTrace(Ray& r, Sampler* sampler)
+	Color pathTrace(Ray& r, Sampler* sampler)
 	{
-		Colour pathThroughput(1.0f, 1.0f, 1.0f);
+		Color pathThroughput(1.0f, 1.0f, 1.0f);
 		return pathTrace(r, pathThroughput, 0, sampler, 0, true);
 	}
 
 	// ###################################################################################################################
 
-	Colour direct(Ray& r, Sampler* sampler)
+	Color direct(Ray& r, Sampler* sampler)
 	{
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
@@ -543,13 +545,12 @@ public:
 			{
 				return shadingData.bsdf->emit(shadingData, shadingData.wo);
 			}
-			float lightPdf = 0.0f;
-			return computeDirect(shadingData, lightPdf, sampler);
+			return computeDirect(shadingData, sampler);
 		}
 		return scene->background->evaluate(r.dir);
 	}
 
-	Colour albedo(Ray& r)
+	Color albedo(Ray& r)
 	{
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
@@ -564,18 +565,18 @@ public:
 		return scene->background->evaluate(r.dir);
 	}
 
-	Colour viewNormals(Ray& r)
+	Color viewNormals(Ray& r)
 	{
 		IntersectionData intersection = scene->traverse(r);
 		if (intersection.t < FLT_MAX)
 		{
 			ShadingData shadingData = scene->calculateShadingData(intersection, r);
-			return Colour(fabsf(shadingData.sNormal.x), fabsf(shadingData.sNormal.y), fabsf(shadingData.sNormal.z));
+			return Color(fabsf(shadingData.sNormal.x), fabsf(shadingData.sNormal.y), fabsf(shadingData.sNormal.z));
 		}
-		return Colour(0.0f, 0.0f, 0.0f);
+		return Color(0.0f, 0.0f, 0.0f);
 	}
 
-	void drawPoint(Vec3 point, Colour col)
+	void drawPoint(Vec3 point, Color col)
 	{
 		Vec3 dir = (point - scene->camera.origin).normalize();
 		bool isInFront = dir.dot(scene->camera.viewDirection) > 0.0f;
@@ -619,7 +620,7 @@ public:
 					float py = y + 0.5f;
 					Ray ray = scene->camera.generateRay(px, py);
 
-					Colour col;
+					Color col;
 					switch (settings.drawMode)
 					{
 					case DM_ALBEDO:
@@ -648,7 +649,7 @@ public:
 						float py = y + samplers[0]->next();
 						Ray ray = scene->camera.generateRay(px, py);
 
-						Colour col;
+						Color col;
 
 						switch (settings.algorithm)
 						{
@@ -736,7 +737,7 @@ public:
 						float py = y + 0.5f;
 						Ray ray = scene->camera.generateRay(px, py);
 
-						Colour col;
+						Color col;
 						switch (settings.drawMode)
 						{
 						case DM_ALBEDO:
@@ -764,7 +765,7 @@ public:
 							float py = y + samplers[id]->next();
 							Ray ray = scene->camera.generateRay(px, py);
 
-							Colour col;
+							Color col;
 
 							switch (settings.algorithm)
 							{
@@ -833,7 +834,7 @@ public:
 				spp = settings.adaptiveSampling && settings.initSPP < film->SPP ? min(tileSamples[sppIndex], film->SPP) : film->SPP;
 
 				// set colour
-				Colour col = film->film[index] / (float)spp;
+				Color col = film->film[index] / (float)spp;
 				memcpy(&aov.color[index * 3], &col.rgb, sizeof(float) * 3);
 
 				// create ray
@@ -871,7 +872,7 @@ public:
 
 	void draw(const AOV& aov)
 	{
-		Colour col;
+		Color col;
 		unsigned char r, g, b;
 		unsigned int index, total = film->height * film->width;
 

@@ -27,11 +27,11 @@ SETTINGS createSettings()
 	settings.useMis = true;
 
 	settings.adaptiveSampling = true;
-	settings.initSPP = 15;
+	settings.initSPP = 20;
 	settings.totalSPP = 500;
 
-	settings.numThreads = 20;
-	settings.maxBounces = 5;
+	settings.numThreads = 8;
+	settings.maxBounces = 6;
 	settings.vplRaysPerTile = 1;
 
 	return settings;
@@ -40,8 +40,7 @@ SETTINGS createSettings()
 int main()
 {
 	SceneManager sceneManager;
-	sceneManager.load(SCENES::BATHROOM);
-	SETTINGS settings = createSettings();
+	sceneManager.load(SCENES::LIVING_ROOM);
 
 	// Create canvas
 	GamesEngineeringBase::Window canvas;
@@ -49,7 +48,7 @@ int main()
 
 	// Create ray tracer
 	RayTracer rt;
-	rt.init(sceneManager.curScene, &canvas, settings);
+	rt.init(sceneManager.curScene, &canvas, createSettings());
 
 	// Create timer
 	GamesEngineeringBase::Timer timer;
@@ -120,13 +119,13 @@ int main()
 
 		if (!completed)
 		{
-			if (settings.useMultithreading)
+			if (rt.settings.useMultithreading)
 				rt.renderMT();
 			else
 				rt.render();
 
 			float finalTime = completed ? renderTime : totalTime - renderStartTime;
-			float progress = rt.getSPP() * 100 / settings.totalSPP;
+			float progress = rt.getSPP() * 100 / rt.settings.totalSPP;
 
 			// Write stats to console
 			std::cout << "\033[F\033[F\033[F\033[F\033[F";
@@ -136,13 +135,13 @@ int main()
 			std::cout << "FPS        : " << (deltaTime > 0 ? 1.0f / deltaTime : FLT_MAX) << "             \n";
 			std::cout << "Total time : " << std::roundf(totalTime) << " sec                               \n";
 
-			if (settings.totalSPP <= rt.getSPP() && settings.render)
+			if (rt.settings.totalSPP <= rt.getSPP() && rt.settings.render)
 			{
 				completed = true;
 
 				// denoising
 				//rt.saveHDR(filename);
-				if (settings.denoise)
+				if (rt.settings.denoise)
 				{
 					rt.createAOV(aov);
 					Denoiser denoiser(aov.width, aov.height);
@@ -155,7 +154,7 @@ int main()
 		else
 		{
 			// draw the image
-			if (settings.denoise)
+			if (rt.settings.denoise)
 				rt.draw(aov);
 			else
 				rt.draw();
