@@ -404,8 +404,8 @@ public:
 
 	inline float powerHeuristic(float pdfA, float pdfB)
 	{
-		float a2 = pdfA * pdfA;
-		float b2 = pdfB * pdfB;
+		float a2 = pdfA;// * pdfA;
+		float b2 = pdfB;// * pdfB;
 
 		if (a2 + b2 == 0.0f)
 			return 0.0f;
@@ -446,9 +446,9 @@ public:
 			float lightPdf = light.pdf * light.pmf;
 
 			// Balance heuristic for MIS
-			float misWeight = powerHeuristic(light.pdf, bsdfPdf);
+			float misWeight = settings.useMis ? powerHeuristic(lightPdf, bsdfPdf) : 1;
 
-			return (light.emitted * bsdfVal * gTerm) / lightPdf;
+			return (light.emitted * bsdfVal * gTerm * misWeight) / lightPdf;
 		}
 
 		return Color(0.0f, 0.0f, 0.0f);
@@ -470,8 +470,10 @@ public:
 				if (canHitLight)
 					return pathThroughput;
 
-				float lightPdf = scene->getLightPdf(shadingData.lightIndex, r.dir);
+				if (!settings.useMis)
+					return Color(0.0f);
 
+				float lightPdf = scene->getLightPdf(shadingData.lightIndex, r.dir);
 				// MIS weight calculation
 				float misWeight = powerHeuristic(prevBsdfPdf, lightPdf);
 
@@ -514,7 +516,17 @@ public:
 		}
 
 		// Missed scene - return background
-		return scene->background->evaluate(r.dir) * pathThroughput;
+
+		pathThroughput = pathThroughput * scene->background->evaluate(r.dir);
+
+		if (depth == 0 || !settings.useMis)
+			return pathThroughput;
+
+		float lightPdf = scene->getLightPdf(r.dir);
+		// MIS weight calculation
+		float misWeight = powerHeuristic(prevBsdfPdf, lightPdf);
+
+		return pathThroughput * misWeight;
 	}
 
 	Color pathTrace(Ray& r, Sampler* sampler)

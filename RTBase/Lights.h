@@ -346,8 +346,9 @@ public:
 	TabulatedDistribution tabDist;	// tabulated distribution for importance sampling
 
 	const bool useTabulated = true;
+	float boost = 1.0f;	// boost factor for luminance values
 
-	EnvironmentMap(Texture* _env)
+	EnvironmentMap(Texture* _env, float boost = 1.0f) :boost(boost)
 	{
 		env = _env;
 		tabDist.init(env);
@@ -383,7 +384,7 @@ public:
 		u = u / (2.0f * M_PI);
 		float v = acosf(wi.y) / M_PI;
 
-		return env->sample(u, v);
+		return env->sample(u, v) * boost;
 	}
 
 	float PDF(const Vec3& wi)
@@ -414,8 +415,16 @@ public:
 
 	Vec3 samplePositionFromLight(Sampler* sampler, float& pdf)
 	{
+		Vec3 p;
 		// Samples a point on the bounding sphere of the scene. Feel free to improve this.
-		Vec3 p = tabDist.sample(sampler, pdf);
+		if (!useTabulated)
+		{
+			p = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
+			pdf = 1.0f / (4 * M_PI * SQ(use<SceneBounds>().sceneRadius));
+		}
+		else
+			p = tabDist.sample(sampler, pdf);
+
 		p = p * use<SceneBounds>().sceneRadius;
 		p = p + use<SceneBounds>().sceneCentre;
 		return p;
@@ -423,8 +432,16 @@ public:
 
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf)
 	{
+		Vec3 wi;
 		// sample from uniform sphere
-		Vec3 wi = tabDist.sample(sampler, pdf);
+		if (!useTabulated)
+		{
+			wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
+			pdf = SamplingDistributions::uniformSpherePDF(wi);
+		}
+		else
+			wi = tabDist.sample(sampler, pdf);
+
 		return wi;
 	}
 };

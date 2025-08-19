@@ -176,7 +176,16 @@ public:
 		if (lightIndex < 0 || lightIndex >= lights.size())
 			return 0.0f;
 
-		return lights[lightIndex]->PDF(wi);
+		return lights[lightIndex]->PDF(wi) / lights.size();
+	}
+
+	float getLightPdf(const Vec3& wi) const
+	{
+		float backgroundPdf = background->PDF(wi);
+		if (lights.size() > 1)
+			backgroundPdf /= lights.size();
+
+		return backgroundPdf;
 	}
 
 	// Do not modify any code below this line

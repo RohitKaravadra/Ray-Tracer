@@ -16,7 +16,7 @@ SETTINGS createSettings()
 	settings.render = false;
 
 	settings.drawMode = DM_ALBEDO;
-	settings.algorithm = AL_LIGHT_TRACE;
+	settings.algorithm = AL_PATH_TRACE;
 	settings.toneMap = TM_REINHARD_GLOBAL;
 	settings.filter = FT_BOX;
 
@@ -27,8 +27,8 @@ SETTINGS createSettings()
 	settings.useMis = true;
 
 	settings.adaptiveSampling = true;
-	settings.initSPP = 20;
-	settings.totalSPP = 500;
+	settings.initSPP = 100;
+	settings.totalSPP = 1000;
 
 	settings.numThreads = 8;
 	settings.maxBounces = 6;
@@ -40,7 +40,7 @@ SETTINGS createSettings()
 int main()
 {
 	SceneManager sceneManager;
-	sceneManager.load(SCENES::BATHROOM);
+	sceneManager.load(SCENES::CORNELL_BOX);
 
 	// Create canvas
 	GamesEngineeringBase::Window canvas;

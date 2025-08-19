@@ -398,5 +398,6 @@ FodyWeavers.xsd
 *.sln.iml
 
 /Output/
-/RTBase/scenes/
-/UnitTests/x64/
+
+/RTBase/scenes/*
+!/RTBase/scenes/cornell-box
