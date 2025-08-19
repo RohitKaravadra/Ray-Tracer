@@ -77,6 +77,14 @@ public:
 
 class Scene
 {
+
+	Light* sampleLight(Sampler* sampler, float& pmf) const
+	{
+		pmf = 1 / (float)lights.size();		// probability mass function
+		unsigned int i = std::min(sampler->next() * lights.size(), lights.size() - 1.0f);
+		return lights[i];
+	}
+
 public:
 	std::vector<Triangle> triangles;
 	std::vector<BSDF*> materials;
@@ -140,23 +148,16 @@ public:
 		return bvh.traverse(ray);
 	}
 
-	Light* sampleLight(Sampler* sampler, float& pmf) const
-	{
-		pmf = 1 / (float)lights.size();		// probability mass function
-		unsigned int i = std::min(sampler->next() * lights.size(), lights.size() - 1.0f);
-		return lights[i];
-	}
-
-	LightSample sampleLightPoint(Sampler* sampler) const
+	LightSample sampleLight(Sampler* sampler) const
 	{
 		LightSample sample;
-		Light* light = sampleLight(sampler, sample.pmf);
+		sample.light = sampleLight(sampler, sample.pmf);
 
-		sample.isNull = light == nullptr;
+		sample.isNull = sample.light == nullptr;
 		if (!sample.isNull)
 		{
-			sample.isArea = light->isArea();
-			sample.p = light->sample(sampler, sample.emitted, sample.pdf);
+			sample.isArea = sample.light->isArea();
+			sample.p = sample.light->sample(sampler, sample.emitted, sample.pdf);
 
 			// adjust position if not an area light (i.e background light)
 			if (!sample.isArea)
@@ -164,7 +165,7 @@ public:
 
 			// get the normal at the sample position
 			// if area light , use the triangle normal
-			sample.n = light->normal(sample.p.normalize());
+			sample.n = sample.light->normal(sample.p.normalize());
 		}
 
 		return sample;

@@ -176,31 +176,28 @@ public:
 		for (unsigned int i = 0; i < settings.vplRaysPerTile; i++)
 		{
 			// Sample a light
-			float pmf;
-			Light* light = scene->sampleLight(sampler, pmf);
+			LightSample light = scene->sampleLight(sampler);
+			float lightPdf = light.pdf * light.pmf;
 
-			float pdfPos, pdfDir;
-
-			// Sample a point on the light
-			Vec3 p = light->samplePositionFromLight(sampler, pdfPos);
 			// sample direction from light
-			Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDir);
+			float pdfDir;
+			Vec3 wi = light.light->sampleDirectionFromLight(sampler, pdfDir);
 
 			ShadingData shadingData;
-			// calculate light emmision
-			Vec3 nLight = light->normal(wi);
 
-			float cosTheta = Dot(wi, nLight);
-			Color Le = light->evaluate(-wi) * cosTheta / (pmf * pdfPos);
+			Color Le = light.emitted / (lightPdf * pdfDir);
+			// normalize light if area light
+			if (light.isArea)
+				Le = Le * max(Dot(wi, light.n), 0);
 
 			VPL vpl;
-			vpl.shadingData = ShadingData(p, nLight);
+			vpl.shadingData = ShadingData(light.p, light.n);
 			vpl.Le = Le;
 
 			// update vpls list
 			vplList.emplace_back(vpl);
 
-			Ray ray(p, wi);
+			Ray ray(light.p + (wi * EPSILON), wi);
 			Color pathThroughput(1.0f, 1.0f, 1.0f);
 
 			VPLTracePath(ray, pathThroughput, Le, sampler, vplList);
@@ -378,31 +375,24 @@ public:
 	void lightTrace(Sampler* sampler)
 	{
 		// Sample a light
-		float pmf;
-		Light* light = scene->sampleLight(sampler, pmf);
+		LightSample light = scene->sampleLight(sampler);
+		float lightPdf = light.pdf * light.pmf;
 
-		float pdfPos, pdfDir;
-
-		// Sample a point on the light
-		Vec3 p = light->samplePositionFromLight(sampler, pdfPos);
 		// sample direction from light
-		Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDir);
+		float pdfDir;
+		Vec3 wi = light.light->sampleDirectionFromLight(sampler, pdfDir);
 
 		ShadingData shadingData;
-		// calculate light emmision
-		Vec3 nLight = light->normal(wi);
 
-		float cosTheta = Dot(wi, nLight);
-		Color Le = light->evaluate(-wi) / (pmf * pdfPos);
+		Color Le = light.emitted / (lightPdf * pdfDir);
+		// normalize light if area light
+		if (light.isArea)
+			Le = Le * max(Dot(wi, light.n), 0);
 
 		// connect to camera to draw light
-		connectToCamera(p, nLight, Le);
+		connectToCamera(light.p, light.n, Le);
 
-		// normalize light if area light
-		if (light->isArea())
-			Le = Le * cosTheta;
-
-		Ray ray(p, wi);
+		Ray ray(light.p + (wi * EPSILON), wi);
 		Color pathThroughput(1.0f, 1.0f, 1.0f);
 
 		lightTracePath(ray, pathThroughput, Le, sampler);
@@ -431,7 +421,7 @@ public:
 		}
 
 		// Light sampling part
-		LightSample light = scene->sampleLightPoint(sampler);
+		LightSample light = scene->sampleLight(sampler);
 		if (light.isNull)
 			return Color(0.0f, 0.0f, 0.0f);
 
@@ -458,7 +448,7 @@ public:
 			// Balance heuristic for MIS
 			float misWeight = powerHeuristic(light.pdf, bsdfPdf);
 
-			return (light.emitted * bsdfVal * gTerm * misWeight) / (lightPdf);
+			return (light.emitted * bsdfVal * gTerm) / lightPdf;
 		}
 
 		return Color(0.0f, 0.0f, 0.0f);
@@ -483,7 +473,7 @@ public:
 				float lightPdf = scene->getLightPdf(shadingData.lightIndex, r.dir);
 
 				// MIS weight calculation
-				float misWeight = powerHeuristic(lightPdf, prevBsdfPdf);
+				float misWeight = powerHeuristic(prevBsdfPdf, lightPdf);
 
 				return pathThroughput * misWeight;
 			}
@@ -591,7 +581,7 @@ public:
 
 	void lightDebug(Sampler* sampler)
 	{
-		LightSample light = scene->sampleLightPoint(sampler);
+		LightSample light = scene->sampleLight(sampler);
 
 		if (!light.isNull)
 			drawPoint(light.p, light.emitted / (light.pdf * light.pmf));

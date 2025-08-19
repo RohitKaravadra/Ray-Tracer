@@ -16,7 +16,7 @@ SETTINGS createSettings()
 	settings.render = false;
 
 	settings.drawMode = DM_ALBEDO;
-	settings.algorithm = AL_PATH_TRACE;
+	settings.algorithm = AL_LIGHT_TRACE;
 	settings.toneMap = TM_REINHARD_GLOBAL;
 	settings.filter = FT_BOX;
 
@@ -40,7 +40,7 @@ SETTINGS createSettings()
 int main()
 {
 	SceneManager sceneManager;
-	sceneManager.load(SCENES::LIVING_ROOM);
+	sceneManager.load(SCENES::BATHROOM);
 
 	// Create canvas
 	GamesEngineeringBase::Window canvas;

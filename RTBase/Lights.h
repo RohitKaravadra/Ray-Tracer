@@ -14,6 +14,8 @@ public:
 	float sceneRadius;
 };
 
+class Light;
+
 struct LightSample
 {
 	Vec3 p;				// position of the light sample
@@ -26,6 +28,8 @@ struct LightSample
 	float pmf;			// probability mass function value for the sample
 
 	Color emitted;		// emission colour of the light sample
+
+	Light* light;		// pointer to the light source from which this sample was taken
 };
 
 class Light
