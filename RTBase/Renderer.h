@@ -22,7 +22,7 @@ struct VPL
 	Color Le;
 };
 
-class RayTracer
+class Renderer
 {
 public:
 	Scene* scene;
@@ -44,7 +44,27 @@ public:
 
 	SETTINGS settings;						// settings for the ray tracer
 
-	~RayTracer()
+	struct PathData
+	{
+		Ray& r;
+		Sampler*& sampler;
+		Color pathThroughput;
+
+		float prevBsdfPdf;
+		bool prevSpecular;
+
+		Color Le;
+
+		PathData(Ray& _r, Sampler*& _sampler) : r(_r), sampler(_sampler)
+		{
+			pathThroughput = Color(1, 1, 1);
+			prevBsdfPdf = 0.0f;
+			prevSpecular = true;
+			Le = Color(0, 0, 0);
+		}
+	};
+
+	~Renderer()
 	{
 		std::cout << "Cleaning Ray Tracer..." << std::endl;
 
@@ -121,15 +141,15 @@ public:
 
 	// RADIOSITY #####################################################################################################
 
-	void VPLTracePath(Ray& r, Color pathThroughput, Color Le, Sampler* sampler, std::vector<VPL>& vplList, int depth = 0)
+	void VPLTracePath(PathData& path, std::vector<VPL>& vplList, int depth = 0)
 	{
 		// Max recursion depth check
 		if (depth >= settings.maxBounces)
 			return;
 
 		// Traverse the scene to find an intersection
-		IntersectionData intersection = scene->traverse(r);
-		ShadingData shadingData = scene->calculateShadingData(intersection, r);
+		IntersectionData intersection = scene->traverse(path.r);
+		ShadingData shadingData = scene->calculateShadingData(intersection, path.r);
 
 		if (shadingData.t < FLT_MAX)  // If the ray hits something
 		{
@@ -140,30 +160,30 @@ public:
 			// Sample new direction
 			Color bsdf;
 			float pdf;
-			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, bsdf, pdf);
+			Vec3 wi = shadingData.bsdf->sample(shadingData, path.sampler, bsdf, pdf);
 
 			// Update path throughput
-			pathThroughput = pathThroughput * bsdf * fabsf(wi.dot(shadingData.sNormal)) / pdf;
+			path.pathThroughput = path.pathThroughput * bsdf * fabsf(wi.dot(shadingData.sNormal)) / pdf;
 
 			VPL vpl;
 			vpl.shadingData = shadingData;
-			vpl.Le = pathThroughput * Le;
+			vpl.Le = path.pathThroughput * path.Le;
 
 			// update vpls list
 			vplList.emplace_back(vpl);
 
 			// Russian Roulette for termination
-			float russianRouletteProbability = min(pathThroughput.Lum(), 0.9f);
-			if (russianRouletteProbability < sampler->next())
+			float russianRouletteProbability = min(path.pathThroughput.Lum(), 0.9f);
+			if (russianRouletteProbability < path.sampler->next())
 				return;
 
-			pathThroughput = pathThroughput / russianRouletteProbability;
+			path.pathThroughput = path.pathThroughput / russianRouletteProbability;
 
 			// Create new ray
-			r.init(shadingData.x + (wi * EPSILON), wi);
+			path.r.init(shadingData.x + (wi * EPSILON), wi);
 
 			// Continue tracing the path recursively
-			VPLTracePath(r, pathThroughput, Le, sampler, vplList, depth + 1);
+			VPLTracePath(path, vplList, depth + 1);
 		}
 	}
 
@@ -200,7 +220,9 @@ public:
 			Ray ray(light.p + (wi * EPSILON), wi);
 			Color pathThroughput(1.0f, 1.0f, 1.0f);
 
-			VPLTracePath(ray, pathThroughput, Le, sampler, vplList);
+			PathData path(ray, sampler);
+			path.Le = Le;
+			VPLTracePath(path, vplList);
 		}
 	}
 
@@ -280,7 +302,7 @@ public:
 
 		// generated new vpls using multi threading
 		for (int i = 0; i < numThreads; i++)
-			threads[i] = new std::thread(&RayTracer::traceVPLs, this, i, std::ref(vplLists[i]));
+			threads[i] = new std::thread(&Renderer::traceVPLs, this, i, std::ref(vplLists[i]));
 
 		for (int i = 0; i < numThreads; i++)
 		{
@@ -329,15 +351,15 @@ public:
 		}
 	}
 
-	void lightTracePath(Ray& r, Color pathThroughput, Color Le, Sampler* sampler, int depth = 0)
+	void lightTracePath(PathData& path, int depth = 0)
 	{
 		// Max recursion depth check
 		if (depth >= settings.maxBounces)
 			return;
 
 		// Traverse the scene to find an intersection
-		IntersectionData intersection = scene->traverse(r);
-		ShadingData shadingData = scene->calculateShadingData(intersection, r);
+		IntersectionData intersection = scene->traverse(path.r);
+		ShadingData shadingData = scene->calculateShadingData(intersection, path.r);
 
 		if (shadingData.t < FLT_MAX)  // If the ray hits something
 		{
@@ -347,28 +369,28 @@ public:
 
 			// connect to camera and draw pixel
 			Vec3 wi = (scene->camera.origin - shadingData.x).normalize();
-			Color col = pathThroughput * shadingData.bsdf->evaluate(shadingData, wi) * Le;
+			Color col = path.pathThroughput * shadingData.bsdf->evaluate(shadingData, wi) * path.Le;
 			connectToCamera(shadingData.x, shadingData.sNormal, col);
 
 			// Russian Roulette for termination
-			float russianRouletteProbability = min(pathThroughput.Lum(), 0.9f);
-			if (russianRouletteProbability < sampler->next())
+			float russianRouletteProbability = min(path.pathThroughput.Lum(), 0.9f);
+			if (russianRouletteProbability < path.sampler->next())
 				return;
-			pathThroughput = pathThroughput / russianRouletteProbability;
+			path.pathThroughput = path.pathThroughput / russianRouletteProbability;
 
 			// Sample new direction
 			Color bsdf;
 			float pdf;
-			wi = shadingData.bsdf->sample(shadingData, sampler, bsdf, pdf);
+			wi = shadingData.bsdf->sample(shadingData, path.sampler, bsdf, pdf);
 
 			// Update path throughput
-			pathThroughput = pathThroughput * bsdf * fabsf(wi.dot(shadingData.sNormal)) / pdf;
+			path.pathThroughput = path.pathThroughput * bsdf * fabsf(wi.dot(shadingData.sNormal)) / pdf;
 
 			// Create new ray
-			r.init(shadingData.x + (wi * EPSILON), wi);
+			path.r.init(shadingData.x + (wi * EPSILON), wi);
 
 			// Continue tracing the path recursively
-			lightTracePath(r, pathThroughput, Le, sampler, depth + 1);
+			lightTracePath(path, depth + 1);
 		}
 	}
 
@@ -395,7 +417,9 @@ public:
 		Ray ray(light.p + (wi * EPSILON), wi);
 		Color pathThroughput(1.0f, 1.0f, 1.0f);
 
-		lightTracePath(ray, pathThroughput, Le, sampler);
+		PathData path(ray, sampler);
+		path.Le = Le;
+		lightTracePath(path, 0);
 	}
 
 	// #############################################################################################################
@@ -454,34 +478,34 @@ public:
 		return Color(0.0f, 0.0f, 0.0f);
 	}
 
-	Color pathTrace(Ray& r, Color& pathThroughput, int depth, Sampler* sampler, float prevBsdfPdf, bool canHitLight)
+	Color pathTrace(PathData& path, int depth = 0)
 	{
-		IntersectionData intersection = scene->traverse(r);
-		ShadingData shadingData = scene->calculateShadingData(intersection, r);
+		IntersectionData intersection = scene->traverse(path.r);
+		ShadingData shadingData = scene->calculateShadingData(intersection, path.r);
 
 		if (shadingData.t < FLT_MAX)
 		{
 			// Handle light hit
 			if (shadingData.bsdf->isLight())
 			{
-				pathThroughput = pathThroughput * shadingData.bsdf->emit(shadingData, r.dir);
+				path.pathThroughput = path.pathThroughput * shadingData.bsdf->emit(shadingData, path.r.dir);
 
 				// if last bsdf was pure specular, we cannot use MIS
-				if (canHitLight)
-					return pathThroughput;
+				if (path.prevSpecular)
+					return path.pathThroughput;
 
 				if (!settings.useMis)
 					return Color(0.0f);
 
-				float lightPdf = scene->getLightPdf(shadingData.lightIndex, r.dir);
 				// MIS weight calculation
-				float misWeight = powerHeuristic(prevBsdfPdf, lightPdf);
+				float lightPdf = scene->getLightPdf(shadingData.lightIndex, path.r.dir);
+				float misWeight = powerHeuristic(path.prevBsdfPdf, lightPdf);
 
-				return pathThroughput * misWeight;
+				return path.pathThroughput * misWeight;
 			}
 
 			// Direct lighting (with MIS)
-			Color direct = pathThroughput * computeDirect(shadingData, sampler);
+			Color direct = path.pathThroughput * computeDirect(shadingData, path.sampler);
 
 			// Russian roulette termination
 			if (depth >= settings.maxBounces)
@@ -489,27 +513,29 @@ public:
 				return direct;
 			}
 
-			float rrProbability = min(max(pathThroughput.Lum(), 0.05f), 0.95f);
-			if (sampler->next() >= rrProbability)
+			float rrProbability = min(max(path.pathThroughput.Lum(), 0.05f), 0.95f);
+			if (path.sampler->next() >= rrProbability)
 			{
 				return direct;
 			}
-			pathThroughput = pathThroughput / rrProbability;
+			path.pathThroughput = path.pathThroughput / rrProbability;
 
 			// Sample BSDF for next path segment
 			Color bsdf;
 			float bsdfPdf;
-			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, bsdf, bsdfPdf);
+			Vec3 wi = shadingData.bsdf->sample(shadingData, path.sampler, bsdf, bsdfPdf);
 
 			// Update path throughput
 			float cosTheta = abs(Dot(wi, shadingData.sNormal));
-			pathThroughput = (pathThroughput * bsdf * cosTheta) / bsdfPdf;
+			path.pathThroughput = (path.pathThroughput * bsdf * cosTheta) / bsdfPdf;
 
-			// Spawn next ray
-			r.init(shadingData.x + (wi * EPSILON), wi);
+			// Update path data
+			path.r.init(shadingData.x + (wi * EPSILON), wi);
+			path.prevBsdfPdf = shadingData.bsdf->PDF(shadingData, path.r.dir);
+			path.prevSpecular = shadingData.bsdf->isPureSpecular();
 
 			// Indirect lighting (recursive call)
-			Color indirect = pathTrace(r, pathThroughput, depth + 1, sampler, bsdfPdf, shadingData.bsdf->isPureSpecular());
+			Color indirect = pathTrace(path, depth + 1);
 
 			// Combine direct and indirect lighting
 			return direct + indirect;
@@ -517,22 +543,22 @@ public:
 
 		// Missed scene - return background
 
-		pathThroughput = pathThroughput * scene->background->evaluate(r.dir);
+		path.pathThroughput = path.pathThroughput * scene->background->evaluate(path.r.dir);
 
-		if (depth == 0 || !settings.useMis)
-			return pathThroughput;
+		if (depth == 0 || path.prevSpecular || !settings.useMis)
+			return path.pathThroughput;
 
-		float lightPdf = scene->getLightPdf(r.dir);
+		float lightPdf = scene->getLightPdf(path.r.dir);
 		// MIS weight calculation
-		float misWeight = powerHeuristic(prevBsdfPdf, lightPdf);
+		float misWeight = powerHeuristic(path.prevBsdfPdf, lightPdf);
 
-		return pathThroughput * misWeight;
+		return path.pathThroughput * misWeight;
 	}
 
 	Color pathTrace(Ray& r, Sampler* sampler)
 	{
-		Color pathThroughput(1.0f, 1.0f, 1.0f);
-		return pathTrace(r, pathThroughput, 0, sampler, 0, true);
+		PathData path(r, sampler);
+		return pathTrace(path);
 	}
 
 	// ###################################################################################################################
@@ -804,7 +830,7 @@ public:
 
 		// process all tiles
 		for (int i = 0; i < numThreads; i++)
-			threads[i] = new std::thread(&RayTracer::processTile, this, i);
+			threads[i] = new std::thread(&Renderer::processTile, this, i);
 
 		for (int i = 0; i < numThreads; i++)
 		{

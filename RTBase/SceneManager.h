@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include "SceneLoader.h"
+#include <filesystem>
 
 static enum SCENES
 {
@@ -33,41 +34,32 @@ static enum SCENES
 class SceneManager
 {
 	// scene names
-	const std::string scenes[24] = { "scenes/cornell-box",		// 0
-								   "scenes/bathroom",			// 1
-								   "scenes/bathroom2",			// 2
-								   "scenes/bedroom",			// 3
-								   "scenes/classroom",			// 4
-								   "scenes/coffee",				// 5
-								   "scenes/dining-room",		// 6		
-								   "scenes/glass-of-water",		// 7
-								   "scenes/house",				// 8
-								   "scenes/kitchen",			// 9
-								   "scenes/living-room",		// 10		
-								   "scenes/living-room-2",		// 11
-								   "scenes/living-room-3",		// 12
-								   "scenes/Sibenik",			// 13	
-								   "scenes/staircase",			// 14	
-								   "scenes/staircase2",			// 15		
-								   "scenes/Terrain",			// 16	
-								   "scenes/veach-bidir",		// 17		
-								   "scenes/veach-mis",			// 18	
-								   "scenes/MaterialsScene",		// 19
-								   "scenes/car2",				// 20
-								   "scenes/materialball",		// 21
-								   "scenes/teapot-full",		// 22
-								   "scenes/Sponza",				// 23
+	const std::string scenes[24] = {
+									"cornell-box",		// 0
+									"bathroom",			// 1
+									"bathroom2",		// 2
+									"bedroom",			// 3
+									"classroom",		// 4
+									"coffee",			// 5
+									"dining-room",		// 6
+									"glass-of-water",	// 7
+									"house",			// 8
+									"kitchen",			// 9
+									"living-room",		// 10	
+									"living-room-2",	// 11
+									"living-room-3",	// 12
+									"Sibenik",			// 13	
+									"staircase",		// 14	
+									"staircase2",		// 15		
+									"Terrain",			// 16	
+									"veach-bidir",		// 17		
+									"veach-mis",		// 18	
+									"MaterialsScene",	// 19
+									"car2",				// 20
+									"materialball",		// 21
+									"teapot-full",		// 22
+									"Sponza",			// 23
 	};
-
-public:
-
-	Scene* curScene = nullptr;
-	RTCamera* viewcamera;
-
-	SceneManager()
-	{
-		viewcamera = new RTCamera();
-	}
 
 	void unload()
 	{
@@ -78,12 +70,38 @@ public:
 		}
 	}
 
-	void load(SCENES scene)
+public:
+	Scene* curScene = nullptr;
+	RTCamera* viewcamera;
+	std::string currentSceneName = "";
+
+	SceneManager() {
+		viewcamera = new RTCamera();
+	}
+
+	bool load(SCENES scene, std::string foldername)
 	{
 		unload();
 		std::string sceneName = scenes[scene];
-		std::cout << "Loading scene: " << sceneName << std::endl;
-		curScene = loadScene(sceneName, *viewcamera);
+		return load(foldername + "/" + sceneName);
+	}
+
+	bool load(std::string sceneFolderPath)
+	{
+		unload();
+
+		// validate if path exists
+		if (!std::filesystem::exists(sceneFolderPath))
+		{
+			std::cout << "Scene does not exist: " << sceneFolderPath << std::endl;
+			return false;
+		}
+
+		// extract scene name from path
+		currentSceneName = sceneFolderPath.substr(sceneFolderPath.find_last_of("/\\") + 1);
+		std::cout << "Loading scene: " << sceneFolderPath << std::endl;
+		curScene = loadScene(sceneFolderPath, *viewcamera);
+		return true;
 	}
 
 	~SceneManager()
