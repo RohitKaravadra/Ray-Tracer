@@ -185,6 +185,8 @@
     <ClInclude Include="Imaging.h" />
     <ClInclude Include="Lights.h" />
     <ClInclude Include="Materials.h" />
+    <ClInclude Include="math\matrix.h" />
+    <ClInclude Include="math\vectors.h" />
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="Sampling.h" />
     <ClInclude Include="Scene.h" />

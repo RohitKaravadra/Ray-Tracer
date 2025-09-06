@@ -348,9 +348,9 @@ public:
 
 	void connectToCamera(Vec3 p, Vec3 n, Color col)
 	{
-		float x, y;
+		Vec2 sp; //screen position
 		// project point on camera if possible
-		if (scene->camera.projectOntoCamera(p, x, y))
+		if (scene->camera.projectOntoCamera(p, sp))
 		{
 			Vec3 toCamDir = (scene->camera.origin - p);
 			float lengthSq = toCamDir.lengthSq();
@@ -368,7 +368,7 @@ public:
 					float cosThetaSq = SQ(cosThetaC);
 					float we = 1.0f / (cosThetaSq * cosThetaSq * scene->camera.Afilm);
 
-					film->splat(x, y, col * we * gTerm);
+					film->splat(sp, col * we * gTerm);
 				}
 			}
 		}
@@ -634,9 +634,9 @@ public:
 
 		if (isInFront)
 		{
-			float px, py;
-			if (scene->camera.projectOntoCamera(point, px, py))
-				film->splat(px, py, col);
+			Vec2 p;
+			if (scene->camera.projectOntoCamera(point, p))
+				film->splat(p, col);
 		}
 	}
 
@@ -667,9 +667,8 @@ public:
 
 				if (!settings.render)
 				{
-					float px = x + 0.5f;
-					float py = y + 0.5f;
-					Ray ray = scene->camera.generateRay(px, py);
+					Vec2 pixel = Vec2(x + 0.5f, y + 0.5f);
+					Ray ray = scene->camera.generateRay(pixel);
 
 					Color col;
 					switch (settings.drawMode)
@@ -685,7 +684,7 @@ public:
 						break;
 					}
 
-					film->splat(px, py, col);
+					film->splat(pixel, col);
 				}
 				else
 				{
@@ -696,9 +695,11 @@ public:
 					}
 					else
 					{
-						float px = x + mtData.samplers[0]->next();
-						float py = y + mtData.samplers[0]->next();
-						Ray ray = scene->camera.generateRay(px, py);
+						// jittered pixel coordinates
+						Vec2 pixel = Vec2(x, y);
+						pixel += Vec2(mtData.samplers[0]->next(),
+							mtData.samplers[0]->next());
+						Ray ray = scene->camera.generateRay(pixel);
 
 						Color col;
 
@@ -711,7 +712,7 @@ public:
 							col = radiosityLightPass(ray, mtData.samplers[0]);
 						}
 
-						film->splat(px, py, col);
+						film->splat(pixel, col);
 					}
 				}
 			}
@@ -724,12 +725,13 @@ public:
 	{
 		for (unsigned int i = 0; i < tileData.totalTiles; i++)
 		{
-			unsigned int startx = (i % tileData.totalXTiles) * tileData.tileSize;
-			unsigned int starty = (i / tileData.totalXTiles) * tileData.tileSize;
+			Vec2i start = Vec2i((i % tileData.totalXTiles), (i / tileData.totalXTiles));
+			start *= tileData.tileSize;
 
-			unsigned int endx = min(startx + tileData.tileSize, film->width);
-			unsigned int endy = min(starty + tileData.tileSize, film->height);
-			std::vector<float> lums = film->getLums(startx, starty, endx, endy);
+			Vec2i end = start + Vec2i(tileData.tileSize, tileData.tileSize);
+			end = end.Min(Vec2i(film->width, film->height));
+
+			std::vector<float> lums = film->getLums(start, end);
 
 			// Compute average luminance
 			float total = 0.0f;
@@ -766,15 +768,15 @@ public:
 			if (isTileRendered)
 				continue;
 
-			unsigned int startx = (i % tileData.totalXTiles) * tileData.tileSize;
-			unsigned int starty = (i / tileData.totalXTiles) * tileData.tileSize;
+			Vec2i start = Vec2i((i % tileData.totalXTiles), (i / tileData.totalXTiles));
+			start *= tileData.tileSize;
 
-			unsigned int endx = min(startx + tileData.tileSize, film->width);
-			unsigned int endy = min(starty + tileData.tileSize, film->height);
+			Vec2i end = start + Vec2i(tileData.tileSize, tileData.tileSize);
+			end = end.Min(Vec2i(film->width, film->height));
 
-			for (unsigned int y = starty; y < endy; y++)
+			for (unsigned int y = start.y; y < end.y; y++)
 			{
-				for (unsigned int x = startx; x < endx; x++)
+				for (unsigned int x = start.x; x < end.x; x++)
 				{
 					if (settings.drawMode == DM_LIGHTS)
 					{
@@ -784,9 +786,8 @@ public:
 
 					if (!settings.render)
 					{
-						float px = x + 0.5f;
-						float py = y + 0.5f;
-						Ray ray = scene->camera.generateRay(px, py);
+						Vec2 pixel = Vec2(x + 0.5f, y + 0.5f);
+						Ray ray = scene->camera.generateRay(pixel);
 
 						Color col;
 						switch (settings.drawMode)
@@ -801,7 +802,7 @@ public:
 							col = direct(ray, mtData.samplers[id]);
 							break;
 						}
-						film->splat(px, py, col);
+						film->splat(pixel, col);
 					}
 					else
 					{
@@ -812,9 +813,11 @@ public:
 						}
 						else
 						{
-							float px = x + mtData.samplers[id]->next();
-							float py = y + mtData.samplers[id]->next();
-							Ray ray = scene->camera.generateRay(px, py);
+							// jittered pixel coordinates
+							Vec2 pixel = Vec2(x, y);
+							pixel += Vec2(mtData.samplers[0]->next(),
+								mtData.samplers[0]->next());
+							Ray ray = scene->camera.generateRay(pixel);
 
 							Color col;
 
@@ -827,7 +830,7 @@ public:
 								col = radiosityLightPass(ray, mtData.samplers[id]);
 							}
 
-							film->splat(px, py, col);
+							film->splat(pixel, col);
 						}
 					}
 				}
@@ -889,9 +892,8 @@ public:
 				memcpy(&aov.color[index * 3], &col.rgb, sizeof(float) * 3);
 
 				// create ray
-				float px = x + 0.5f;
-				float py = y + 0.5f;
-				Ray ray = scene->camera.generateRay(px, py);
+				Vec2 pixel = Vec2(x + 0.5f, y + 0.5f);
+				Ray ray = scene->camera.generateRay(pixel);
 
 				// set albedo 
 				col = albedo(ray);

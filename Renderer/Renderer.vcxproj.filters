@@ -66,6 +66,12 @@
     <ClInclude Include="Bvh.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="math\vectors.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="math\matrix.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">

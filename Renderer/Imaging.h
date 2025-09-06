@@ -315,20 +315,22 @@ public:
 		delete filter;
 	}
 
-	void splat(const float x, const float y, const Color& L)
+	void splat(const Vec2& p, const Color& L)
 	{
 		float filterWeights[25]; // Storage to cache weights
 		unsigned int indices[25]; // Store indices to minimize computations 
 		unsigned int used = 0;
 		float total = 0;
 		int size = filter->size();
-		for (int i = -size; i <= size; i++) {
-			for (int j = -size; j <= size; j++) {
-				int px = (int)x + j;
-				int py = (int)y + i;
-				if (px >= 0 && px < width && py >= 0 && py < height) {
-					indices[used] = (py * width) + px;
-					filterWeights[used] = filter->filter(px - x, py - y);
+		for (int i = -size; i <= size; i++)
+		{
+			for (int j = -size; j <= size; j++)
+			{
+				Vec2i sp = Vec2i(p.x + j, p.y + i);
+				if (sp.x >= 0 && sp.x < width && sp.y >= 0 && sp.y < height)
+				{
+					indices[used] = (sp.y * width) + sp.x;
+					filterWeights[used] = filter->filter(sp.x - p.x, sp.y - p.y);
 					total += filterWeights[used];
 					used++;
 				}
@@ -373,12 +375,12 @@ public:
 	}
 
 	// Get the luminance of a pixels from the film with the given coordinates
-	std::vector<float> getLums(unsigned int startx, unsigned int starty, unsigned int endx, unsigned int endy)
+	std::vector<float> getLums(const Vec2i& start, const Vec2i& end)
 	{
 		std::vector<float> lums;
 
-		for (unsigned int x = startx; x < endx; x++)
-			for (unsigned int y = starty; y < endy; y++)
+		for (unsigned int x = start.x; x < end.x; x++)
+			for (unsigned int y = start.y; y < end.y; y++)
 				lums.emplace_back(film[y * width + x].Lum());
 
 		return lums;

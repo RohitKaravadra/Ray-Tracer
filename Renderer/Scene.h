@@ -47,10 +47,10 @@ public:
 	/// <param name="x"> x coordinate of screen pixel </param>
 	/// <param name="y"> y coordinate of screen pixel</param>
 	/// <returns> A ray from camera origin with direction to the point on near plane </returns>
-	Ray generateRay(float x, float y)
+	Ray generateRay(const Vec2& p)
 	{
-		float xprime = x / width;
-		float yprime = 1.0f - (y / height);
+		float xprime = p.x / width;
+		float yprime = 1.0f - (p.y / height);
 		xprime = (xprime * 2.0f) - 1.0f;
 		yprime = (yprime * 2.0f) - 1.0f;
 		Vec3 dir(xprime, yprime, 1.0f);
@@ -59,19 +59,18 @@ public:
 		return Ray(origin, dir.normalize());
 	}
 
-	bool projectOntoCamera(const Vec3& p, float& x, float& y)
+	bool projectOntoCamera(const Vec3& p, Vec2& sp)
 	{
 		Vec3 pview = cameraToView.mulPoint(p);
 		Vec3 pproj = projectionMatrix.mulPointAndPerspectiveDivide(pview);
-		x = (pproj.x + 1.0f) * 0.5f;
-		y = (pproj.y + 1.0f) * 0.5f;
-		if (x < 0 || x > 1.0f || y < 0 || y > 1.0f)
-		{
+
+		sp = (Vec2(pproj.x, pproj.y) + 1.0f) * 0.5f;
+
+		if (sp < 0 || sp > 1)
 			return false;
-		}
-		x = x * width;
-		y = 1.0f - y;
-		y = y * height;
+
+		sp.y = 1.0f - sp.y;
+		sp *= Vec2(width, height);
 		return true;
 	}
 };
