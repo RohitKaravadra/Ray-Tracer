@@ -30,28 +30,28 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -72,28 +72,28 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(SolutionDir)\Output\Builds\$(SolutionName)-$(Configuration)-$(Platform)</OutDir>
-    <IntDir>$(SolutionDir)\Output\Temp\$(Configuration)\$(Platform)</IntDir>
-    <IncludePath>C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\RTBase\oidn\include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\RTBase\oidn\lib;$(LibraryPath)</LibraryPath>
+    <OutDir>$(SolutionDir)Output\Builds\$(SolutionName)-$(Configuration)-$(Platform)</OutDir>
+    <IntDir>$(SolutionDir)Output\Temp\$(Configuration)\$(Platform)</IntDir>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ProjectDir)oidn\include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(ProjectDir)oidn\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IntDir>$(SolutionDir)\Output\Temp\$(Configuration)\$(Platform)</IntDir>
-    <OutDir>$(SolutionDir)\Output\Builds\$(SolutionName)-$(Configuration)-$(Platform)</OutDir>
-    <IncludePath>C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\RTBase\oidn\include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\RTBase\oidn\lib;$(LibraryPath)</LibraryPath>
+    <IntDir>$(SolutionDir)Output\Temp\$(Configuration)\$(Platform)</IntDir>
+    <OutDir>$(SolutionDir)Output\Builds\$(SolutionName)-$(Configuration)-$(Platform)</OutDir>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ProjectDir)oidn\include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(ProjectDir)oidn\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IntDir>$(SolutionDir)\Output\Temp\$(Configuration)\$(Platform)</IntDir>
-    <OutDir>$(SolutionDir)\Output\Builds\$(SolutionName)-$(Configuration)-$(Platform)</OutDir>
-    <IncludePath>C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\RTBase\oidn\include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\RTBase\oidn\lib;$(LibraryPath)</LibraryPath>
+    <IntDir>$(SolutionDir)Output\Temp\$(Configuration)\$(Platform)</IntDir>
+    <OutDir>$(SolutionDir)Output\Builds\$(SolutionName)-$(Configuration)-$(Platform)</OutDir>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ProjectDir)oidn\include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(ProjectDir)oidn\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IntDir>$(SolutionDir)\Output\Temp\$(Configuration)\$(Platform)</IntDir>
-    <OutDir>$(SolutionDir)\Output\Builds\$(SolutionName)-$(Configuration)-$(Platform)</OutDir>
-    <IncludePath>C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\RTBase\oidn\include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Users\Rohit Karavadra\Documents\CPP Codes\Ray-Tracer\RTBase\oidn\lib;$(LibraryPath)</LibraryPath>
+    <IntDir>$(SolutionDir)Output\Temp\$(Configuration)\$(Platform)</IntDir>
+    <OutDir>$(SolutionDir)Output\Builds\$(SolutionName)-$(Configuration)-$(Platform)</OutDir>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ProjectDir)oidn\include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(ProjectDir)oidn\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -101,14 +101,15 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\Rohit Karavadra\Documents\Codes\CPP\RayTracer\RTBase\oidn\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)oidn\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard_C>Default</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>$(ProjectDir)oidn\lib\OpenImageDenoise.lib;$(ProjectDir)oidn\lib\OpenImageDenoise_core.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Users\Rohit Karavadra\Documents\Codes\CPP\RayTracer\RTBase\oidn\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ProjectDir)oidn\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -119,8 +120,9 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\Rohit Karavadra\Documents\Codes\CPP\RayTracer\RTBase\oidn\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)oidn\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard_C>Default</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -128,7 +130,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>$(ProjectDir)oidn\lib\OpenImageDenoise.lib;$(ProjectDir)oidn\lib\OpenImageDenoise_core.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Users\Rohit Karavadra\Documents\Codes\CPP\RayTracer\RTBase\oidn\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ProjectDir)oidn\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -137,14 +139,15 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\Rohit Karavadra\Documents\Codes\CPP\RayTracer\RTBase\oidn\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)oidn\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard_C>Default</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>$(ProjectDir)oidn\lib\OpenImageDenoise.lib;$(ProjectDir)oidn\lib\OpenImageDenoise_core.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Users\Rohit Karavadra\Documents\Codes\CPP\RayTracer\RTBase\oidn\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ProjectDir)oidn\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -159,8 +162,9 @@
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <FloatingPointModel>Fast</FloatingPointModel>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
-      <AdditionalIncludeDirectories>C:\Users\Rohit Karavadra\Documents\Codes\CPP\RayTracer\RTBase\oidn\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)oidn\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard_C>Default</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -168,7 +172,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>$(ProjectDir)oidn\lib\OpenImageDenoise.lib;$(ProjectDir)oidn\lib\OpenImageDenoise_core.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Users\Rohit Karavadra\Documents\Codes\CPP\RayTracer\RTBase\oidn\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ProjectDir)oidn\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

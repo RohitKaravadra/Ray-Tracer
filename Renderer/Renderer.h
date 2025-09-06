@@ -22,20 +22,47 @@ struct VPL
 	Color Le;
 };
 
+// data to handle multithreading
+struct MULTITHREADING_DATA
+{
+	MTRandom** samplers;		// samplers for multithreading
+	std::thread** threads;		// threads for multithreading
+	int numProcs;				// number of processors
+	unsigned int numThreads;	// number of threads
+
+	// destructor to clean up threads and samplers
+	~MULTITHREADING_DATA()
+	{
+		// clean threads
+		if (threads != nullptr)
+			delete[] threads;
+		// clean samplers
+		if (samplers != nullptr)
+		{
+			for (unsigned int i = 0; i < numThreads; i++)
+				delete samplers[i];
+			delete[] samplers;
+		}
+	}
+};
+
+// data to handle tiling
+struct TILING_DATA
+{
+	unsigned int totalTiles;	// number of tiles
+	unsigned int totalXTiles;	// number of tiles in x direction	
+	unsigned int tileSize;		// size of each tile
+};
+
 class Renderer
 {
 public:
 	Scene* scene;
 	GamesEngineeringBase::Window* canvas;
 	Film* film;
-	MTRandom** samplers;					// samplers for multithreading
-	std::thread** threads;					// threads for multithreading
-	int numProcs;							// number of processors
-	unsigned int numThreads;				// number of threads
 
-	unsigned int totalTiles;				// number of tiles
-	unsigned int totalXTiles;				// number of tiles in x direction	
-	const unsigned int tileSize = 16;		// size of each tile
+	MULTITHREADING_DATA mtData;		// multithreading data
+	TILING_DATA tileData;			// tiling data
 
 	std::atomic<unsigned int> tileCounter;	// number of tiles processed
 	std::vector<unsigned int> tileSamples;	// number of samples per tile
@@ -68,18 +95,6 @@ public:
 	{
 		std::cout << "Cleaning Ray Tracer..." << std::endl;
 
-		// clean threads
-		if (threads != nullptr)
-			delete[] threads;
-
-		// clean samplers
-		if (samplers != nullptr)
-		{
-			for (unsigned int i = 0; i < numThreads; i++)
-				delete samplers[i];
-			delete[] samplers;
-		}
-
 		// clean film
 		if (film != nullptr)
 			delete film;
@@ -94,44 +109,52 @@ public:
 
 		film = new Film();
 		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, settings.filter);
-		SYSTEM_INFO sysInfo;
-		GetSystemInfo(&sysInfo);
-		numProcs = sysInfo.dwNumberOfProcessors;
 
 		// only use adaptive sampling for path tracing
 		settings.adaptiveSampling = settings.adaptiveSampling && settings.algorithm == AL_PATH_TRACE;
 		if (!(settings.adaptiveSampling && settings.useMultithreading))
 			settings.initSPP = settings.totalSPP;
 
-		setMultithreading(settings.numThreads);
+		setMultithreadingData(settings.numThreads);
+		setTileData();
 	}
 
-	void setMultithreading(unsigned int _numThreads)
+	void setTileData()
 	{
+		// set tile size
+		tileData.tileSize = 16;
+
+		// calculate number of tiles
+		tileData.totalXTiles = (canvas->getWidth() + tileData.tileSize - 1) / tileData.tileSize;
+		float totalYTiles = (canvas->getHeight() + tileData.tileSize - 1) / tileData.tileSize;
+		tileData.totalTiles = tileData.totalXTiles * totalYTiles;
+
+		// create samples for each tile
+		tileSamples.resize(tileData.totalTiles, 1);
+
+		tileCounter.store(0);
+	}
+
+	void setMultithreadingData(unsigned int _numThreads)
+	{
+		SYSTEM_INFO sysInfo;
+		GetSystemInfo(&sysInfo);
+		mtData.numProcs = sysInfo.dwNumberOfProcessors;
+
 		// calculate number of threads according to available processors
-		numThreads = max(1, min(_numThreads, numProcs));
+		mtData.numThreads = max(1, min(_numThreads, mtData.numProcs));
 
 		// create threads and samplers for each thread
-		threads = new std::thread * [numThreads];
-		samplers = new MTRandom * [numThreads];
+		mtData.threads = new std::thread * [mtData.numThreads];
+		mtData.samplers = new MTRandom * [mtData.numThreads];
 
 		// assign different seeds to each sampler
 		// Linear Congruential Generator used for seed
 		// x + 1 = [a * (x - 1) + c] % m
 		// where a = 48271, c = 0
 		int m = pow(2, 32) - 1;
-		for (unsigned int i = 0; i < numThreads; i++)
-			samplers[i] = new MTRandom((48271 * (i + 1)) % m);
-
-		// calculate number of tiles
-		totalXTiles = (canvas->getWidth() + tileSize - 1) / tileSize;
-		float totalYTiles = (canvas->getHeight() + tileSize - 1) / tileSize;
-		totalTiles = totalXTiles * totalYTiles;
-
-		// create samples for each tile
-		tileSamples.resize(totalTiles, 1);
-
-		tileCounter.store(0);
+		for (unsigned int i = 0; i < mtData.numThreads; i++)
+			mtData.samplers[i] = new MTRandom((48271 * (i + 1)) % m);
 	}
 
 	void clear()
@@ -189,9 +212,9 @@ public:
 
 	void traceVPLs(unsigned int id, std::vector<VPL>& vplList)
 	{
-		Sampler* sampler = samplers[id];
+		Sampler* sampler = mtData.samplers[id];
 
-		int total = settings.vplRaysPerTile * numThreads;
+		int total = settings.vplRaysPerTile * mtData.numThreads;
 
 		for (unsigned int i = 0; i < settings.vplRaysPerTile; i++)
 		{
@@ -298,16 +321,16 @@ public:
 	void radiosityVplPass()
 	{
 		// list fo newly generated vpls by each thread
-		std::vector<std::vector<VPL>> vplLists(numThreads);
+		std::vector<std::vector<VPL>> vplLists(mtData.numThreads);
 
 		// generated new vpls using multi threading
-		for (int i = 0; i < numThreads; i++)
-			threads[i] = new std::thread(&Renderer::traceVPLs, this, i, std::ref(vplLists[i]));
+		for (int i = 0; i < mtData.numThreads; i++)
+			mtData.threads[i] = new std::thread(&Renderer::traceVPLs, this, i, std::ref(vplLists[i]));
 
-		for (int i = 0; i < numThreads; i++)
+		for (int i = 0; i < mtData.numThreads; i++)
 		{
-			threads[i]->join();
-			delete threads[i];
+			mtData.threads[i]->join();
+			delete mtData.threads[i];
 		}
 
 		// clear past vpls
@@ -638,7 +661,7 @@ public:
 			{
 				if (settings.drawMode == DM_LIGHTS)
 				{
-					lightDebug(samplers[0]);
+					lightDebug(mtData.samplers[0]);
 					continue;
 				}
 
@@ -658,7 +681,7 @@ public:
 						col = viewNormals(ray);
 						break;
 					case DM_DIRECT:
-						col = direct(ray, samplers[0]);
+						col = direct(ray, mtData.samplers[0]);
 						break;
 					}
 
@@ -668,13 +691,13 @@ public:
 				{
 					if (settings.algorithm == AL_LIGHT_TRACE)
 					{
-						lightTrace(samplers[0]);
+						lightTrace(mtData.samplers[0]);
 						continue;
 					}
 					else
 					{
-						float px = x + samplers[0]->next();
-						float py = y + samplers[0]->next();
+						float px = x + mtData.samplers[0]->next();
+						float py = y + mtData.samplers[0]->next();
 						Ray ray = scene->camera.generateRay(px, py);
 
 						Color col;
@@ -682,10 +705,10 @@ public:
 						switch (settings.algorithm)
 						{
 						case AL_PATH_TRACE:
-							col = pathTrace(ray, samplers[0]);
+							col = pathTrace(ray, mtData.samplers[0]);
 							break;
 						case AL_INSTANT_RADIOSITY:
-							col = radiosityLightPass(ray, samplers[0]);
+							col = radiosityLightPass(ray, mtData.samplers[0]);
 						}
 
 						film->splat(px, py, col);
@@ -699,13 +722,13 @@ public:
 
 	void calculateTileSamples()
 	{
-		for (unsigned int i = 0; i < totalTiles; i++)
+		for (unsigned int i = 0; i < tileData.totalTiles; i++)
 		{
-			unsigned int startx = (i % totalXTiles) * tileSize;
-			unsigned int starty = (i / totalXTiles) * tileSize;
+			unsigned int startx = (i % tileData.totalXTiles) * tileData.tileSize;
+			unsigned int starty = (i / tileData.totalXTiles) * tileData.tileSize;
 
-			unsigned int endx = min(startx + tileSize, film->width);
-			unsigned int endy = min(starty + tileSize, film->height);
+			unsigned int endx = min(startx + tileData.tileSize, film->width);
+			unsigned int endy = min(starty + tileData.tileSize, film->height);
 			std::vector<float> lums = film->getLums(startx, starty, endx, endy);
 
 			// Compute average luminance
@@ -734,7 +757,7 @@ public:
 	void processTile(unsigned int id)
 	{
 		unsigned int i;
-		while ((i = tileCounter.fetch_add(1)) < totalTiles)
+		while ((i = tileCounter.fetch_add(1)) < tileData.totalTiles)
 		{
 			bool isTileRendered = film->SPP > settings.initSPP &&
 				film->SPP > tileSamples[i] &&
@@ -743,11 +766,11 @@ public:
 			if (isTileRendered)
 				continue;
 
-			unsigned int startx = (i % totalXTiles) * tileSize;
-			unsigned int starty = (i / totalXTiles) * tileSize;
+			unsigned int startx = (i % tileData.totalXTiles) * tileData.tileSize;
+			unsigned int starty = (i / tileData.totalXTiles) * tileData.tileSize;
 
-			unsigned int endx = min(startx + tileSize, film->width);
-			unsigned int endy = min(starty + tileSize, film->height);
+			unsigned int endx = min(startx + tileData.tileSize, film->width);
+			unsigned int endy = min(starty + tileData.tileSize, film->height);
 
 			for (unsigned int y = starty; y < endy; y++)
 			{
@@ -755,7 +778,7 @@ public:
 				{
 					if (settings.drawMode == DM_LIGHTS)
 					{
-						lightDebug(samplers[id]);
+						lightDebug(mtData.samplers[id]);
 						continue;
 					}
 
@@ -775,7 +798,7 @@ public:
 							col = viewNormals(ray);
 							break;
 						case DM_DIRECT:
-							col = direct(ray, samplers[id]);
+							col = direct(ray, mtData.samplers[id]);
 							break;
 						}
 						film->splat(px, py, col);
@@ -784,13 +807,13 @@ public:
 					{
 						if (settings.algorithm == AL_LIGHT_TRACE)
 						{
-							lightTrace(samplers[id]);
+							lightTrace(mtData.samplers[id]);
 							continue;
 						}
 						else
 						{
-							float px = x + samplers[id]->next();
-							float py = y + samplers[id]->next();
+							float px = x + mtData.samplers[id]->next();
+							float py = y + mtData.samplers[id]->next();
 							Ray ray = scene->camera.generateRay(px, py);
 
 							Color col;
@@ -798,10 +821,10 @@ public:
 							switch (settings.algorithm)
 							{
 							case AL_PATH_TRACE:
-								col = pathTrace(ray, samplers[id]);
+								col = pathTrace(ray, mtData.samplers[id]);
 								break;
 							case AL_INSTANT_RADIOSITY:
-								col = radiosityLightPass(ray, samplers[id]);
+								col = radiosityLightPass(ray, mtData.samplers[id]);
 							}
 
 							film->splat(px, py, col);
@@ -829,13 +852,13 @@ public:
 			radiosityVplPass();
 
 		// process all tiles
-		for (int i = 0; i < numThreads; i++)
-			threads[i] = new std::thread(&Renderer::processTile, this, i);
+		for (int i = 0; i < mtData.numThreads; i++)
+			mtData.threads[i] = new std::thread(&Renderer::processTile, this, i);
 
-		for (int i = 0; i < numThreads; i++)
+		for (int i = 0; i < mtData.numThreads; i++)
 		{
-			threads[i]->join();
-			delete threads[i];
+			mtData.threads[i]->join();
+			delete mtData.threads[i];
 		}
 
 		// calculate samples of tiles for adaptive sampling
@@ -852,13 +875,13 @@ public:
 		int sppY, spp, sppIndex;
 		for (unsigned int y = 0; y < aov.height; y++)
 		{
-			sppY = (y / tileSize) * totalXTiles;
+			sppY = (y / tileData.tileSize) * tileData.totalXTiles;
 			for (unsigned int x = 0; x < aov.width; x++)
 			{
 				// calculate index
 				unsigned int index = y * aov.width + x;
 
-				sppIndex = sppY + x / tileSize;
+				sppIndex = sppY + x / tileData.tileSize;
 				spp = settings.adaptiveSampling && settings.initSPP < film->SPP ? min(tileSamples[sppIndex], film->SPP) : film->SPP;
 
 				// set colour
@@ -887,10 +910,10 @@ public:
 		int sppY, spp, sppIndex;
 		for (unsigned int y = 0; y < film->height; y++)
 		{
-			sppY = (y / tileSize) * totalXTiles;
+			sppY = (y / tileData.tileSize) * tileData.totalXTiles;
 			for (unsigned int x = 0; x < film->width; x++)
 			{
-				sppIndex = sppY + x / tileSize;
+				sppIndex = sppY + x / tileData.tileSize;
 				spp = settings.adaptiveSampling && settings.initSPP < film->SPP ? min(tileSamples[sppIndex], film->SPP) : film->SPP;
 				film->tonemap(x, y, r, g, b, spp, settings.toneMap);
 				canvas->draw(y * film->width + x, r, g, b);
