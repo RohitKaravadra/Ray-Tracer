@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include "SceneManager.h"
 
+
 // create settings
 static SETTINGS createSettings()
 {
@@ -22,12 +23,12 @@ static SETTINGS createSettings()
 	settings.filter = FT_BOX;
 
 	settings.debug = false;
-	settings.denoise = true;
+	settings.denoise = false;
 
 	settings.useMultithreading = true;
 	settings.useMis = true;
 
-	settings.adaptiveSampling = true;
+	settings.adaptiveSampling = false;
 	settings.initSPP = 50;
 	settings.totalSPP = 600;
 
@@ -85,6 +86,7 @@ public:
 		{
 			completed = true;
 			renderTime = totalTime - renderStartTime;
+			std::cout << "\n Render completed \n\n";
 		}
 	}
 
@@ -95,7 +97,7 @@ public:
 	void print(Renderer& rt) const
 	{
 		float finalTime = completed ? renderTime : totalTime - renderStartTime;
-		float progress = rt.settings.render ? rt.getSPP() * 100 / rt.settings.totalSPP : 0;
+		float progress = rt.data.settings.render ? rt.getSPP() * 100 / rt.data.settings.totalSPP : 0;
 
 		// Write stats to console
 		std::cout << "\033[F\033[F\033[F\033[F\033[F";
@@ -109,7 +111,7 @@ public:
 
 static void saveRender(Renderer& rt, const std::string& filename)
 {
-	if (!rt.settings.saveRenders)
+	if (!rt.data.settings.saveRenders)
 		return;
 
 	const wchar_t* rendersFolder = L"Renders";
@@ -133,7 +135,6 @@ int main()
 	Renderer rt;
 	rt.init(sceneManager.curScene, &canvas, createSettings());
 
-
 	// Create timer
 	GamesEngineeringBase::Timer timer;
 	Stats stats;
@@ -156,7 +157,7 @@ int main()
 		}
 
 		// Update camera and check if it has changed (reset if it has)
-		if (!rt.settings.render && sceneManager.viewcamera->update(canvas))
+		if (!rt.data.settings.render && sceneManager.viewcamera->update(canvas))
 		{
 			rt.clear();
 			stats.reset();
@@ -186,14 +187,11 @@ int main()
 
 		if (!stats.isCompleted())
 		{
-			if (rt.settings.useMultithreading)
-				rt.renderMT();
-			else
-				rt.render();
+			rt.render();
 
 			stats.print(rt);
 
-			if (rt.settings.totalSPP <= rt.getSPP() && rt.settings.render)
+			if (rt.data.settings.totalSPP <= rt.getSPP() && rt.data.settings.render)
 			{
 				stats.onCompletion();
 
@@ -201,7 +199,7 @@ int main()
 				saveRender(rt, sceneManager.currentSceneName + "_render.png");
 
 				// denoising
-				if (rt.settings.denoise)
+				if (rt.data.settings.denoise)
 				{
 					rt.createAOV(aov);
 					Denoiser denoiser(aov.width, aov.height);
@@ -217,7 +215,7 @@ int main()
 		else
 		{
 			// draw the image
-			if (rt.settings.denoise)
+			if (rt.data.settings.denoise)
 				rt.draw(aov);
 			else
 				rt.draw();
