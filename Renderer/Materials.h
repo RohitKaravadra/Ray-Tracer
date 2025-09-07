@@ -390,7 +390,7 @@ public:
 		}
 		else // Refract
 		{
-			float sin2ThetaI = std::max(0.0f, 1.0f - absCosThetaI * absCosThetaI);
+			float sin2ThetaI = max(0.0f, 1.0f - absCosThetaI * absCosThetaI);
 			float sin2ThetaT = eta * eta * sin2ThetaI;
 
 			float cosThetaT = sqrtf(1.0f - sin2ThetaT);
@@ -518,7 +518,7 @@ public:
 		float sinTheta = sinf(thetaI);
 
 		Vec3 wi(sinTheta * cosf(phiI), sinTheta * sinf(phiI), r1);
-		float demon = (A + B * std::max(cosf(phiI - phiO), 0.0f) * sinf(std::max(thetaI, thetaO) * tanf(std::min(thetaI, thetaO))));
+		float demon = (A + B * max(cosf(phiI - phiO), 0.0f) * sinf(max(thetaI, thetaO) * tanf(min(thetaI, thetaO))));
 
 		pdf = fabsf(wi.z) / M_PI;
 		reflectedColour = (albedo->sample(shadingData.tu, shadingData.tv) / M_PI) * demon;
@@ -537,7 +537,7 @@ public:
 		float thetaI = SphericalCoordinates::sphericalTheta(localWi);
 		float phiI = SphericalCoordinates::sphericalPhi(localWi);
 
-		float demon = (A + B * std::max(cosf(phiI - phiO), 0.0f) * sinf(std::max(thetaI, thetaO) * tanf(std::min(thetaI, thetaO))));
+		float demon = (A + B * max(cosf(phiI - phiO), 0.0f) * sinf(max(thetaI, thetaO) * tanf(min(thetaI, thetaO))));
 
 		return (albedo->sample(shadingData.tu, shadingData.tv) / M_PI) * demon;
 	}
@@ -586,7 +586,7 @@ public:
 		alpha = 1.62142f * sqrtf(roughness);
 
 		eta = extIOR / intIOR;
-		e = (2.0f / SQ(std::max(alpha, 0.001f))) - 2.0f;
+		e = (2.0f / SQ(max(alpha, 0.001f))) - 2.0f;
 	}
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
@@ -613,7 +613,7 @@ public:
 		else						// Lambertian reflection
 			wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
 
-		float cosAlpha = std::max(0.0f, wr.dot(wi));
+		float cosAlpha = max(0.0f, wr.dot(wi));
 
 		// compute the PDF
 		float diffPdf = (1.0f - F) * fabsf(wi.z) / M_PI;
@@ -639,7 +639,7 @@ public:
 		float F = ShadingHelper::fresnelDielectric(std::abs(localWi.z), eta);
 
 		Vec3 wr(-localWo.x, -localWo.y, localWo.z);
-		float cosAlpha = std::max(0.0f, wr.dot(localWi));
+		float cosAlpha = max(0.0f, wr.dot(localWi));
 
 		float diff = (1.0f - F) / M_PI;
 		float spec = F * (e + 2.0f) * powf(cosAlpha, e) / (2.0f * M_PI);
@@ -655,7 +655,7 @@ public:
 		Vec3 wr(-localWo.x, -localWo.y, localWo.z);
 
 		float cosTheta = fabsf(localWi.z);
-		float cosAlpha = std::max(0.0f, wr.dot(localWi));
+		float cosAlpha = max(0.0f, wr.dot(localWi));
 
 		float F = ShadingHelper::fresnelDielectric(cosTheta, eta);
 

@@ -1,13 +1,7 @@
 #pragma once
 #include "OpenImageDenoise/oidn.hpp"
 #include <iostream>
-
-// ANSI color codes
-#define ANSI_COLOR_RED     "\033[31m"
-#define ANSI_COLOR_GREEN   "\033[32m"
-#define ANSI_COLOR_YELLOW  "\033[33m"
-#define ANSI_COLOR_BLUE    "\033[34m"
-#define ANSI_COLOR_RESET   "\033[0m"
+#include "TerminalUI.h"
 
 // denoising AOVs
 // Arbitrary Output Variable
@@ -115,11 +109,11 @@ public:
 			initializeBuffers();
 
 			initialized = true;
-			std::cout << ANSI_COLOR_GREEN << "OIDN initialized successfully" << ANSI_COLOR_RESET << std::endl;
+			tui::print(tui::color::green("OIDN initialized successfully"));
 		}
 		catch (const std::exception& e)
 		{
-			std::cerr << ANSI_COLOR_RED << "ERROR: " << e.what() << ANSI_COLOR_RESET << std::endl;
+			tui::print(tui::color::red(tui::format("ERROR: ", e.what())));
 			cleanup();
 			throw;
 		}
@@ -130,13 +124,13 @@ public:
 		// Check if OIDN is initialized
 		if (!initialized)
 		{
-			std::cerr << ANSI_COLOR_RED << "ERROR: Denoiser not initialized" << ANSI_COLOR_RESET << std::endl;
+			tui::print(tui::color::red("ERROR: Denoiser not initialized"));
 			return;
 		}
 
 		try
 		{
-			std::cout << ANSI_COLOR_YELLOW << "Starting denoising..." << ANSI_COLOR_RESET << std::endl;
+			tui::print(tui::color::yellow("Starting denoising..."));
 
 			// Copy data to buffers
 			oidnWriteBuffer(colorBuf, 0, dataSize, &aov.color[0]);
@@ -166,10 +160,10 @@ public:
 			// Copy results back
 			oidnReadBuffer(outputBuf, 0, dataSize, &aov.output[0]);
 
-			std::cout << ANSI_COLOR_GREEN << "Denoising completed successfully" << ANSI_COLOR_RESET << std::endl;
+			tui::print(tui::color::green("Denoising completed successfully"));
 		}
 		catch (const std::exception& e) {
-			std::cerr << ANSI_COLOR_RED << "ERROR: " << e.what() << ANSI_COLOR_RESET << std::endl;
+			tui::print(tui::color::red(tui::format("ERROR: ", e.what())));
 			throw;
 		}
 	}

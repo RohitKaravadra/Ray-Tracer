@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Imaging.h"
+#include "TerminalUI.h"
 
 enum ALGORITHM
 {
@@ -49,6 +50,27 @@ struct SETTINGS
 		maxBounces = 5;
 
 		totalSPP = 8192;
+	}
+
+	// ostream operator using TerminalUI formatting
+	friend std::ostream& operator<<(std::ostream& os, const SETTINGS& settings)
+	{
+		os << tui::color::green(tui::format(
+			"=============== Settings ============== \n",
+			"  Tone Map       :", (settings.toneMap == TM_NONE ? "None" :
+				settings.toneMap == TM_LINEAR ? "Linear" :
+				settings.toneMap == TM_LINEAR_EXPOSURE ? "Linear with Exposure" :
+				settings.toneMap == TM_REINHARD_GLOBAL ? "Reinhard Global" : "Filmic"), "\n",
+			"  Filter         :", (settings.filter == FT_BOX ? "Box" :
+				settings.filter == FT_GAUSSIAN ? "Gaussian" : "Mitchell-Netravali"), "\n\n",
+			"  Multithreading :", (settings.useMultithreading ? "Enabled" : "Disabled"), "\n",
+			"  Denoise        :", (settings.denoise ? "Enabled" : "Disabled"), "\n",
+			"  Save Renders   :", (settings.saveRenders ? "Enabled" : "Disabled"), "\n\n",
+			"  Threads        :", settings.numThreads, "\n",
+			"  Max Bounces    :", settings.maxBounces, "\n",
+			"  Total SPP      :", settings.totalSPP, "\n",
+			"======================================= \n"));
+		return os;
 	}
 };
 

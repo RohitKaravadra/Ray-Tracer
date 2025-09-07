@@ -84,6 +84,9 @@
     <ClInclude Include="algorithms\Radiosity.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TerminalUI.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">

@@ -293,8 +293,8 @@ public:
 		Vec3 exit = Max(tmin, tmax);
 
 		// find time of intersection for entry and exit point
-		float tentry = std::max(std::max(entry.x, entry.y), entry.z);
-		float texit = std::min(std::min(exit.x, exit.y), exit.z);
+		float tentry = max(max(entry.x, entry.y), entry.z);
+		float texit = min(min(exit.x, exit.y), exit.z);
 
 		if (tentry > texit || texit < 0)
 			return false;
@@ -315,8 +315,8 @@ public:
 		Vec3 exit = Max(tmin, tmax);
 
 		// find time of intersection for entry and exit point
-		float tentry = std::max(std::max(entry.x, entry.y), entry.z);
-		float texit = std::min(std::min(exit.x, exit.y), exit.z);
+		float tentry = max(max(entry.x, entry.y), entry.z);
+		float texit = min(min(exit.x, exit.y), exit.z);
 
 		return !(tentry > texit || texit < 0);
 	}
@@ -360,7 +360,7 @@ public:
 				-0.5 * (b + sqrtf(dis)) :
 				-0.5 * (b - sqrtf(dis));
 
-			t = std::min(q / a, c / q);
+			t = min(q / a, c / q);
 		}
 
 		return true;

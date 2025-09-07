@@ -82,7 +82,7 @@ class Scene
 	Light* sampleLight(Sampler* sampler, float& pmf) const
 	{
 		pmf = 1 / (float)lights.size();		// probability mass function
-		unsigned int i = std::min(sampler->next() * lights.size(), lights.size() - 1.0f);
+		unsigned int i = min(sampler->next() * lights.size(), lights.size() - 1.0f);
 		return lights[i];
 	}
 

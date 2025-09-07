@@ -10,6 +10,8 @@
 #pragma warning( disable : 4244)
 
 #define SQ(x) (x * x)
+#define min(a,b) ((a < b) ? a : b)
+#define max(a,b) ((a > b) ? a : b)
 
 template <typename T>
 constexpr const T& clamp(const T& value, const T& low, const T& high)

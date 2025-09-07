@@ -79,8 +79,8 @@ public:
 	Color sample(const float tu, const float tv) const
 	{
 		Color tex;
-		float u = std::max(0.0f, fabsf(tu)) * width;
-		float v = std::max(0.0f, fabsf(tv)) * height;
+		float u = max(0.0f, fabsf(tu)) * width;
+		float v = max(0.0f, fabsf(tv)) * height;
 		int x = (int)floorf(u);
 		int y = (int)floorf(v);
 		float frac_u = u - x;
@@ -106,8 +106,8 @@ public:
 			return 1.0f;
 		}
 		float tex;
-		float u = std::max(0.0f, fabsf(tu)) * width;
-		float v = std::max(0.0f, fabsf(tv)) * height;
+		float u = max(0.0f, fabsf(tu)) * width;
+		float v = max(0.0f, fabsf(tv)) * height;
 		int x = (int)floorf(u);
 		int y = (int)floorf(v);
 		float frac_u = u - x;
@@ -243,26 +243,26 @@ class Film
 	// Linear tonemap
 	void liner(float& r, float& g, float& b)
 	{
-		r = powf(std::max(r, 0.0f), inv2p2) * 255;
-		g = powf(std::max(g, 0.0f), inv2p2) * 255;
-		b = powf(std::max(b, 0.0f), inv2p2) * 255;
+		r = powf(max(r, 0.0f), inv2p2) * 255;
+		g = powf(max(g, 0.0f), inv2p2) * 255;
+		b = powf(max(b, 0.0f), inv2p2) * 255;
 	}
 
 	// Linear tonemap with exposure
 	void linerWithExposure(float& r, float& g, float& b, float exposure = 1.0f)
 	{
 		const float e = std::pow(2.0f, exposure * inv2p2);
-		r = powf(std::max(r, 0.0f), inv2p2) * e * 255;
-		g = powf(std::max(g, 0.0f), inv2p2) * e * 255;
-		b = powf(std::max(b, 0.0f), inv2p2) * e * 255;
+		r = powf(max(r, 0.0f), inv2p2) * e * 255;
+		g = powf(max(g, 0.0f), inv2p2) * e * 255;
+		b = powf(max(b, 0.0f), inv2p2) * e * 255;
 	}
 
 	// Reinhard global tonemap
 	void ReinhardGlobal(float& r, float& g, float& b)
 	{
-		r = powf(std::max(r / (1.0f + r), 0.0f), inv2p2) * 255;
-		g = powf(std::max(g / (1.0f + g), 0.0f), inv2p2) * 255;
-		b = powf(std::max(b / (1.0f + b), 0.0f), inv2p2) * 255;
+		r = powf(max(r / (1.0f + r), 0.0f), inv2p2) * 255;
+		g = powf(max(g / (1.0f + g), 0.0f), inv2p2) * 255;
+		b = powf(max(b / (1.0f + b), 0.0f), inv2p2) * 255;
 	}
 
 	float CX(float x) const
@@ -356,9 +356,9 @@ public:
 		case TM_FILMIC:filmic(fr, fg, fb);
 		}
 
-		r = std::min(fr, 255.f);
-		g = std::min(fg, 255.f);
-		b = std::min(fb, 255.f);
+		r = min(fr, 255.f);
+		g = min(fg, 255.f);
+		b = min(fb, 255.f);
 	}
 
 	// Tonemap the pixel
@@ -366,9 +366,9 @@ public:
 	{
 		Color pixel = film[(y * size.x) + x] / (float)spp;
 
-		float fr = std::max(pixel.r, 0.0f);
-		float fg = std::max(pixel.g, 0.0f);
-		float fb = std::max(pixel.b, 0.0f);
+		float fr = max(pixel.r, 0.0f);
+		float fg = max(pixel.g, 0.0f);
+		float fb = max(pixel.b, 0.0f);
 
 		tonemap(fr, fg, fb, r, g, b, toneMap);
 	}

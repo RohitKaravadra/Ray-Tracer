@@ -1,13 +1,11 @@
 
-
+#define NOMINMAX
 #include "GEMLoader.h"
 #include "Renderer.h"
 #include "SceneLoader.h"
-#define NOMINMAX
-#include "GamesEngineeringBase.h"
 #include <unordered_map>
 #include "SceneManager.h"
-
+#include "GamesEngineeringBase.h"
 
 /// <summary>
 /// Creates and returns a SETTINGS object initialized with default values.
@@ -19,7 +17,7 @@ static SETTINGS createSettings()
 
 	settings.saveRenders = false;
 	settings.debug = false;
-	settings.denoise = true;
+	settings.denoise = false;
 
 	settings.drawMode = DM_ALBEDO;
 	settings.algorithm = AL_PATH_TRACE;
@@ -91,15 +89,21 @@ public:
 
 	bool canInput() const { return totalTime - lastInputTime > 0.1f; }
 
-	void print(float progress, int spp) const
+	void print(float progress, int spp, std::string alg, bool rendering) const
 	{
 		// Write stats to console
-		std::cout << "\033[F\033[F\033[F\033[F\033[F";
-		std::cout << "Progress   : " << progress * 100 << "%                                 \n";
-		std::cout << "Samples    : " << spp << "                                             \n";
-		std::cout << "Time       : " << deltaTime << "                                       \n";
-		std::cout << "FPS        : " << (deltaTime > 0 ? 1.0f / deltaTime : FLT_MAX) << "    \n";
-		std::cout << "Total time : " << std::roundf(totalTime) << " sec                      \n";
+		tui::restoreCursor();
+		tui::clearRest();
+		if (rendering)
+			tui::print(tui::color::cyan(tui::format("Algorithm  : ", alg,
+				" (Progress   : ", std::to_string((int)(progress * 100)), " %)")));
+		else
+			tui::print(tui::color::cyan(tui::format("Algorithm  : ", alg, " (change - TAB , render - R) ")));
+
+		/*tui::print(tui::color::cyan(tui::format("===============  STATS  ===============")));
+		tui::print(tui::color::cyan(tui::format("Samples    : ", std::to_string(spp))));
+		tui::print(tui::color::cyan(tui::format("Time       : ", std::to_string(deltaTime))));
+		tui::print(tui::color::cyan(tui::format("Total time : ", std::to_string(std::roundf(totalTime)))));*/
 	}
 };
 
@@ -120,14 +124,70 @@ static void saveRender(Renderer& rt, const std::string& filename)
 }
 
 
-/// <summary>
-/// Entry point for the ray tracing application. Initializes the scene, window, renderer, and main loop for user interaction and rendering.
-/// </summary>
-/// <returns>Returns 0 upon successful execution.</returns>
-int main()
+static std::string parseArgs(int argc, char* argv[], SETTINGS& settings)
 {
+	// argumnt contains the scene name and settings
+	// example: "scenes/cornell-box" -spp 100 -bounces 5 -threads 4 -denoise 1 -saveRenders 1 -numThreads 8 -filter 0 -toneMap 3 -drawMode 2 -algorithm 0
+	// create settings and return scene path if valid else return null
+
+	if (argc < 2)
+	{
+		std::cout << "Usage: RayTracer <scene_path> [options]\n";
+		return "";
+	}
+
+	std::string scenePath = argv[1];
+	std::unordered_map<std::string, std::string> argsMap;
+	for (int i = 2; i < argc; i += 2)
+	{
+		if (i + 1 < argc)
+			argsMap[argv[i]] = argv[i + 1];
+		else
+			argsMap[argv[i]] = "";
+	}
+
+	// Parse settings from argsMap
+	if (argsMap.find("-spp") != argsMap.end())
+		settings.totalSPP = max(10, min(100000, std::stoi(argsMap["-spp"])));
+	if (argsMap.find("-bounces") != argsMap.end())
+		settings.maxBounces = max(2, min(100, std::stoi(argsMap["-bounces"])));
+	if (argsMap.find("-threads") != argsMap.end())
+		settings.numThreads = max(1, min(64, std::stoi(argsMap["-threads"])));
+	if (argsMap.find("-denoise") != argsMap.end())
+		settings.denoise = std::stoi(argsMap["-denoise"]) != 0;
+	if (argsMap.find("-saveRenders") != argsMap.end())
+		settings.saveRenders = std::stoi(argsMap["-saveRenders"]) != 0;
+	if (argsMap.find("-filter") != argsMap.end())
+		settings.filter = static_cast<IMAGE_FILTER>(max(0, min(3, std::stoi(argsMap["-filter"]))));
+	if (argsMap.find("-toneMap") != argsMap.end())
+		settings.toneMap = static_cast<TONEMAP>(max(0, min(4, std::stoi(argsMap["-toneMap"]))));
+
+	return scenePath;
+}
+
+/// <summary>
+/// Entry point for the ray-tracing application. Initializes the scene, window, renderer, and main loop for user interaction and rendering.
+/// </summary>
+/// <param name="argc">The number of command-line arguments.</param>
+/// <param name="argv">An array of command-line argument strings.</param>
+/// <returns>Returns 0 upon successful execution.</returns>
+int main(int argc, char* argv[])
+{
+	tui::clear();
+	tui::hideCursor();
+
+	SETTINGS settings = createSettings();
 	SceneManager sceneManager;
-	sceneManager.load(SCENES::CORNELL_BOX, "scenes");
+
+	std::cout << settings;
+
+	if (argc < 2)
+		sceneManager.load(SCENES::CORNELL_BOX, "scenes");
+	else
+	{
+		std::string scenePath = parseArgs(argc, argv, settings);
+		sceneManager.load(scenePath);
+	}
 
 	// Create canvas
 	GamesEngineeringBase::Window canvas;
@@ -144,7 +204,8 @@ int main()
 	bool running = true;
 	AOV aov;
 
-	std::cout << "\n\n\n\n\n";
+	tui::saveCursor();
+	stats.print(0, 0, "", false);
 	while (running)
 	{
 		stats.update(timer.dt());
@@ -172,7 +233,9 @@ int main()
 			if (canvas.keyPressed('R'))
 				rt.toggleRender();
 			else if (canvas.keyPressed(VK_SPACE))
-				rt.cycleMode();
+				rt.cycleDrawMode();
+			else if (canvas.keyPressed(VK_TAB))
+				rt.cycleAlgorithm();
 			else
 				inputChanged = false;
 
@@ -192,7 +255,8 @@ int main()
 			float progress = 0;
 			int spp = 0;
 			rt.getProgress(progress, spp);
-			stats.print(progress, spp);
+			stats.print(progress, spp,
+				rt.getAlgorithm(), rt.isRendering());
 
 			if (rt.isCompleted())
 			{
@@ -205,5 +269,6 @@ int main()
 		canvas.present();
 	}
 
+	tui::showCursor();
 	return 0;
 }

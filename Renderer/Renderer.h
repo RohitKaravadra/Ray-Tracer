@@ -289,6 +289,16 @@ public:
 
 	bool isCompleted() const { return data.isCompleted; }
 	bool isRendering() const { return data.isRendering; }
+	std::string getAlgorithm() const
+	{
+		switch (data.settings.algorithm)
+		{
+		case AL_PATH_TRACE:return "Path Tracing";
+		case AL_LIGHT_TRACE:return "Light Tracing";
+		case AL_INSTANT_RADIOSITY:return "Instant Radiosity";
+		default:return "Unknown";
+		}
+	}
 
 	bool getProgress(float& progress, int& spp) const
 	{
@@ -372,18 +382,14 @@ public:
 	// SETTINGS MODIFICATION
 	// ##################################################################################
 
-	void cycleMode()
-	{
-		clear();
-
-		if (data.isRendering)
-			cycleAlgorithm();
-		else
-			cycleDrawMode();
-	}
 
 	void cycleDrawMode()
 	{
+		if (data.isRendering)
+			return;
+
+		clear();
+
 		if (data.settings.drawMode == DM_ALBEDO)
 			data.settings.drawMode = DM_NORMALS;
 		else if (data.settings.drawMode == DM_NORMALS)
@@ -394,6 +400,9 @@ public:
 
 	void cycleAlgorithm()
 	{
+		if (data.isRendering)
+			return;
+
 		if (data.settings.algorithm == AL_PATH_TRACE)
 			data.settings.algorithm = AL_LIGHT_TRACE;
 		else if (data.settings.algorithm == AL_LIGHT_TRACE)

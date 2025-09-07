@@ -1194,8 +1194,8 @@ namespace GamesEngineeringBase
 		// Sets the vibration intensity for the left and right motors
 		void vibrate(float l, float r)
 		{
-			unsigned short lV = min(static_cast<unsigned short>(l * 65535), 65535);
-			unsigned short rV = min(static_cast<unsigned short>(r * 65535), 65535);
+			unsigned short lV = min(static_cast<unsigned int>(l * 65535), 65535u);
+			unsigned short rV = min(static_cast<unsigned int>(r * 65535), 65535u);
 			XINPUT_VIBRATION vibration;
 			memset(&vibration, 0, sizeof(XINPUT_VIBRATION));
 			vibration.wLeftMotorSpeed = lV;
