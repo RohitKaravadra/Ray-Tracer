@@ -13,7 +13,7 @@ public:
 	Vec3 from;
 	Vec3 to;
 	Vec3 up;
-	Camera* camera = NULL;
+	SceneCamera* camera = NULL;
 	float movespeed = 1.0f;
 	float rotspeed = 5.0f;
 	RTCamera()
@@ -253,7 +253,8 @@ void loadInstance(std::string sceneName, std::vector<Triangle>& meshTriangles, s
 		if (roughness < 0.001f)
 		{
 			material = new GlassBSDF(loadTexture(filename, textureManager), intIOR, extIOR);
-		} else
+		}
+		else
 		{
 			material = new DielectricBSDF(loadTexture(filename, textureManager), intIOR, extIOR, roughness);
 		}
@@ -356,7 +357,7 @@ Scene* loadScene(std::string sceneName, RTCamera& viewcamera)
 	{
 		P.a[0][0] = -P.a[0][0];
 	}
-	scene->camera.init(P, width, height);
+	scene->camera.init(P, Vec2i(width, height));
 	scene->camera.updateView(V);
 
 	viewcamera.from = from;
@@ -377,7 +378,8 @@ Scene* loadScene(std::string sceneName, RTCamera& viewcamera)
 	{
 		Texture* env = loadTexture(sceneName + "/" + gemscene.findProperty("envmap").getValue(""), textureManager);
 		background = new EnvironmentMap(env);
-	} else
+	}
+	else
 	{
 		background = new BackgroundColour(Color(0.0f, 0.0f, 0.0f));
 	}

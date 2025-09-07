@@ -2,8 +2,15 @@
 
 #include "Algorithm.h"
 
+/// <summary>
+/// Path Tracing algorithm with Multiple Importance Sampling (MIS) and Russian Roulette termination.
+/// Implements adaptive sampling based on tile variance.
+/// </summary>
 class PathTracing : public AlgorithmBase
 {
+	/// <summary>
+	/// Path data structure to hold information about the current path segment.
+	/// </summary>
 	struct PathData
 	{
 		Ray& r;
@@ -24,6 +31,10 @@ class PathTracing : public AlgorithmBase
 		}
 	};
 
+	// percentage of total SPP to use as initial samples
+	const float initSppAmnt = 0.2f;
+	int initSpp;			// initial number of samples per tile
+
 	// number of samples per tile for adaptive sampling
 	std::vector<unsigned int> tileSamples;
 
@@ -34,6 +45,10 @@ class PathTracing : public AlgorithmBase
 		pdfB *= pdfB;
 		return pdfA / (pdfA + pdfB);
 	}
+
+	// ##################################################################################
+	// PATH TRACING METHODS
+	// ##################################################################################
 
 	Color computeDirect(ShadingData shadingData, Sampler* sampler)
 	{
@@ -68,7 +83,7 @@ class PathTracing : public AlgorithmBase
 			float lightPdf = light.pdf * light.pmf;
 
 			// Balance heuristic for MIS
-			float misWeight = data.settings.useMis ? powerHeuristic(lightPdf, bsdfPdf) : 1;
+			float misWeight = powerHeuristic(lightPdf, bsdfPdf);
 
 			return (light.emitted * bsdfVal * gTerm * misWeight) / lightPdf;
 		}
@@ -91,9 +106,6 @@ class PathTracing : public AlgorithmBase
 				// if last bsdf was pure specular, we cannot use MIS
 				if (path.prevSpecular)
 					return path.pathThroughput;
-
-				if (!data.settings.useMis)
-					return Color(0.0f);
 
 				// MIS weight calculation
 				float lightPdf = data.scene->getLightPdf(shadingData.lightIndex, path.r.dir);
@@ -143,7 +155,7 @@ class PathTracing : public AlgorithmBase
 
 		path.pathThroughput = path.pathThroughput * data.scene->background->evaluate(path.r.dir);
 
-		if (depth == 0 || path.prevSpecular || !data.settings.useMis)
+		if (depth == 0 || path.prevSpecular)
 			return path.pathThroughput;
 
 		float lightPdf = data.scene->getLightPdf(path.r.dir);
@@ -159,6 +171,10 @@ class PathTracing : public AlgorithmBase
 		return pathTrace(path);
 	}
 
+	// ##################################################################################
+	// ADAPTIVE SAMPLING METHOD
+	// ##################################################################################
+
 	void calculateTileSamples()
 	{
 		for (unsigned int i = 0; i < data.totalTiles; i++)
@@ -167,7 +183,7 @@ class PathTracing : public AlgorithmBase
 			start *= data.tileSize;
 
 			Vec2i end = start + Vec2i(data.tileSize, data.tileSize);
-			end = end.Min(Vec2i(data.film->width, data.film->height));
+			end = end.Min(data.film->size);
 
 			std::vector<float> lums = data.film->getLums(start, end);
 
@@ -189,6 +205,10 @@ class PathTracing : public AlgorithmBase
 			tileSamples[i] = (unsigned int)(data.film->SPP + (data.settings.totalSPP - data.film->SPP) * weight);
 		}
 	}
+
+	// ##################################################################################
+	// RENDERING METHODS
+	// ##################################################################################
 
 	void renderTile(const Vec2i& start, const Vec2i& end, const Sampler* sampler)
 	{
@@ -213,7 +233,7 @@ class PathTracing : public AlgorithmBase
 		unsigned int i;
 		while ((i = data.tileCounter.fetch_add(1)) < data.totalTiles)
 		{
-			bool isTileRendered = data.film->SPP > data.settings.initSPP &&
+			bool isTileRendered = data.film->SPP > initSpp &&
 				data.film->SPP > tileSamples[i];
 
 			if (isTileRendered)
@@ -223,7 +243,7 @@ class PathTracing : public AlgorithmBase
 			start *= data.tileSize;
 
 			Vec2i end = start + Vec2i(data.tileSize, data.tileSize);
-			end = end.Min(Vec2i(data.film->width, data.film->height));
+			end = end.Min(data.film->size);
 
 			renderTile(start, end, data.samplers[id]);
 		}
@@ -244,22 +264,43 @@ class PathTracing : public AlgorithmBase
 		}
 
 		// calculate samples of tiles for adaptive sampling
-		if (data.film->SPP == data.settings.initSPP)
+		if (data.film->SPP == initSpp)
 			calculateTileSamples();
 	}
 
-public:
-	PathTracing(RENDERER_DATA& data) : AlgorithmBase(data) {
-		tileSamples.resize(data.totalTiles, 1);
-	}
-
-	void render() override
+	void process() override
 	{
-		data.film->incrementSPP();
-
 		if (data.settings.useMultithreading)
 			renderMT();
 		else
-			renderTile(Vec2i(0, 0), Vec2i(data.film->width, data.film->height), data.samplers[0]);
+			renderTile(Vec2i(0, 0), data.film->size, data.samplers[0]);
+	}
+
+public:
+	PathTracing(RENDERER_DATA& data) : AlgorithmBase(data)
+	{
+		tileSamples.resize(data.totalTiles, 1);
+		initSpp = max((int)(data.settings.totalSPP * initSppAmnt), 1);
+	}
+
+	int getSpp(int index) override
+	{
+		return initSpp < data.film->SPP ? min(tileSamples[index], data.film->SPP) : data.film->SPP;
+	}
+
+	void draw() override
+	{
+		unsigned char r, g, b;
+		int sppY, spp, sppIndex;
+		for (unsigned int y = 0; y < data.film->size.y; y++)
+		{
+			sppY = (y / data.tileSize) * data.totalXTiles;
+			for (unsigned int x = 0; x < data.film->size.x; x++)
+			{
+				spp = getSpp(sppY + x / data.tileSize);
+				data.film->tonemap(x, y, r, g, b, spp, data.settings.toneMap);
+				data.canvas->draw(y * data.film->size.x + x, r, g, b);
+			}
+		}
 	}
 };

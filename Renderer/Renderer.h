@@ -7,49 +7,51 @@
 #include "Denoiser.h"
 #include "algorithms/PathTracing.h"
 #include "algorithms/LightTracing.h"
-#include "algorithms/InstantRadiosity.h"
+#include "algorithms/Radiosity.h"
 
+/// <summary>
+/// Manages and selects different rendering algorithms for use in rendering operations.
+/// </summary>
+class AlgorithmFactory
+{
+	std::map<ALGORITHM, std::unique_ptr<Algorithm>> algorithms;
+	ALGORITHM currentAlgorithm;
+public:
+	AlgorithmFactory(RENDERER_DATA& data)
+	{
+		algorithms[AL_PATH_TRACE] = std::make_unique<PathTracing>(data);
+		algorithms[AL_LIGHT_TRACE] = std::make_unique<LightTracing>(data);
+		algorithms[AL_INSTANT_RADIOSITY] = std::make_unique<Radiosity>(data);
+		currentAlgorithm = AL_PATH_TRACE;
+	}
+
+	void render() { algorithms[currentAlgorithm]->render(); }
+	void draw() { algorithms[currentAlgorithm]->draw(); }
+	int getSpp(int index) { return algorithms[currentAlgorithm]->getSpp(index); }
+	void setAlgorithm(ALGORITHM algo) { currentAlgorithm = algo; }
+};
+
+
+/// <summary>
+/// Renderer class that handles rendering operations using different algorithms.
+/// </summary>
 class Renderer
 {
-public:
-	RENDERER_DATA data;		// multithreading data
+	RENDERER_DATA data;							// renderer data used by all algorithms
+	std::unique_ptr<AlgorithmFactory> factory;	// algorithm factory
 
-	AlgorithmBase* algorithm; // current rendering algorithm
-
-	~Renderer()
-	{
-		std::cout << "Cleaning Ray Tracer..." << std::endl;
-		delete algorithm;
-	}
-
-	void init(Scene* _scene, GamesEngineeringBase::Window* _canvas, SETTINGS _settings)
-	{
-		data.scene = _scene;
-		data.canvas = _canvas;
-		data.settings = _settings;
-
-		data.film = new Film();
-		data.film->init((unsigned int)data.scene->camera.width, (unsigned int)data.scene->camera.height, data.settings.filter);
-
-		// only use adaptive sampling for path tracing
-		data.settings.adaptiveSampling = data.settings.adaptiveSampling && data.settings.algorithm == AL_PATH_TRACE;
-		if (!(data.settings.adaptiveSampling && data.settings.useMultithreading))
-			data.settings.initSPP = data.settings.totalSPP;
-
-		setMultithreadingData(data.settings.numThreads);
-		setTileData();
-
-		algorithm = new InstantRadiosity(data);
-	}
+	// ##################################################################################
+	// DATA SETUP
+	// ##################################################################################
 
 	void setTileData()
 	{
 		// set tile size
-		data.tileSize = 16;
+		data.tileSize = 32;
 
 		// calculate number of tiles
-		data.totalXTiles = (data.canvas->getWidth() + data.tileSize - 1) / data.tileSize;
-		float totalYTiles = (data.canvas->getHeight() + data.tileSize - 1) / data.tileSize;
+		data.totalXTiles = (data.film->size.x + data.tileSize - 1) / data.tileSize;
+		float totalYTiles = (data.film->size.y + data.tileSize - 1) / data.tileSize;
 		data.totalTiles = data.totalXTiles * totalYTiles;
 
 		data.tileCounter.store(0);
@@ -77,10 +79,9 @@ public:
 			data.samplers[i] = new MTRandom((48271 * (i + 1)) % m);
 	}
 
-	void clear()
-	{
-		data.film->clear();
-	}
+	// ##################################################################################
+	// DEBUG DRAW MODES
+	// ##################################################################################
 
 	Color albedo(Ray& r)
 	{
@@ -110,8 +111,8 @@ public:
 
 	void drawPoint(Vec3 point, Color col)
 	{
-		Vec3 dir = (point - data.scene->camera.origin).normalize();
-		bool isInFront = dir.dot(data.scene->camera.viewDirection) > 0.0f;
+		Vec3 dir = (point - data.scene->camera.pos).normalize();
+		bool isInFront = dir.dot(data.scene->camera.dir) > 0.0f;
 
 		if (isInFront)
 		{
@@ -128,6 +129,10 @@ public:
 		if (!light.isNull)
 			drawPoint(light.p, light.emitted / (light.pdf * light.pmf));
 	}
+
+	// ##################################################################################
+	// DEBUG RENDERING
+	// ##################################################################################
 
 	void renderTile(const Vec2i& start, const Vec2i& end, const Sampler* sampler)
 	{
@@ -170,7 +175,7 @@ public:
 			start *= data.tileSize;
 
 			Vec2i end = start + Vec2i(data.tileSize, data.tileSize);
-			end = end.Min(Vec2i(data.film->width, data.film->height));
+			end = end.Min(data.film->size);
 
 			renderTile(start, end, data.samplers[id]);
 		}
@@ -178,7 +183,7 @@ public:
 
 	void debug()
 	{
-		clear();
+		data.film->clear();
 
 		if (data.settings.useMultithreading)
 		{
@@ -195,35 +200,28 @@ public:
 			}
 		}
 		else
-			renderTile(Vec2i(0, 0), Vec2i(data.film->width, data.film->height), data.samplers[0]);
+			renderTile(Vec2i(0, 0), data.film->size, data.samplers[0]);
 	}
 
-	void render()
-	{
-		if (data.settings.render)
-			algorithm->render();
-		else
-			debug();
-	}
-
-	// ##################################################################################################################
+	// ##################################################################################
+	// DENOISING
+	// ##################################################################################
 
 	void createAOV(AOV& aov)
 	{
-		aov = AOV(data.film->width, data.film->height);
+		aov = AOV(data.film->size);
 
 		int sppY, spp, sppIndex;
-		for (unsigned int y = 0; y < aov.height; y++)
+		for (unsigned int y = 0; y < aov.size.y; y++)
 		{
 			sppY = (y / data.tileSize) * data.totalXTiles;
-			for (unsigned int x = 0; x < aov.width; x++)
+			for (unsigned int x = 0; x < aov.size.x; x++)
 			{
 				// calculate index
-				unsigned int index = y * aov.width + x;
+				unsigned int index = y * aov.size.x + x;
 
 				sppIndex = sppY + x / data.tileSize;
-				spp = data.film->SPP;
-				// spp = data.settings.adaptiveSampling && data.settings.initSPP < data.film->SPP ? min(tileSamples[sppIndex], film->SPP) : film->SPP;
+				spp = factory->getSpp(sppIndex);
 
 				// set colour
 				Color col = data.film->film[index] / (float)spp;
@@ -244,68 +242,151 @@ public:
 		}
 	}
 
-	void draw()
-	{
-		unsigned char r, g, b;
-		int sppY, spp, sppIndex;
-		for (unsigned int y = 0; y < data.film->height; y++)
-		{
-			sppY = (y / data.tileSize) * data.totalXTiles;
-			for (unsigned int x = 0; x < data.film->width; x++)
-			{
-				sppIndex = sppY + x / data.tileSize;
-				spp = data.film->SPP > 0 ? data.film->SPP : 1;
-				// spp = data.settings.adaptiveSampling && data.settings.initSPP < data.film->SPP ? min(tileSamples[sppIndex], film->SPP) : film->SPP;
-				data.film->tonemap(x, y, r, g, b, spp, data.settings.toneMap);
-				data.canvas->draw(y * data.film->width + x, r, g, b);
-			}
-		}
-	}
-
-	void draw(const AOV& aov)
+	void drawDenoised()
 	{
 		Color col;
 		unsigned char r, g, b;
-		unsigned int index, total = data.film->height * data.film->width;
+		unsigned int index, total = data.film->size.y * data.film->size.x;
 
 		for (unsigned int i = 0; i < total; i++)
 		{
 			index = i * 3;
-			data.film->tonemap(aov.output[index],
-				aov.output[index + 1],
-				aov.output[index + 2],
+			data.film->tonemap(data.aov.output[index],
+				data.aov.output[index + 1],
+				data.aov.output[index + 2],
 				r, g, b, data.settings.toneMap);
 			data.canvas->draw(i, r, g, b);
 		}
 	}
 
-	int getSPP() const
+	// ##################################################################################
+
+public:
+
+	Renderer(Scene* _scene, GamesEngineeringBase::Window* _canvas, SETTINGS _settings)
 	{
-		return data.film->SPP;
+		data.scene = _scene;
+		data.canvas = _canvas;
+		data.settings = _settings;
+
+		data.film = new Film();
+		data.film->init(data.scene->camera.size, data.settings.filter);
+
+		setMultithreadingData(data.settings.numThreads);
+		setTileData();
+
+		factory = std::make_unique<AlgorithmFactory>(data);
 	}
 
-	void saveHDR(std::string filename)
+	~Renderer()
 	{
-		data.film->save(filename);
+		std::cout << "Cleaning Ray Tracer..." << std::endl;
 	}
+
+	// ##################################################################################
+	// GETTERS
+	// ##################################################################################
+
+	bool isCompleted() const { return data.isCompleted; }
+	bool isRendering() const { return data.isRendering; }
+
+	bool getProgress(float& progress, int& spp) const
+	{
+		if (!data.isRendering)
+			return false;
+
+		spp = data.film->SPP;
+		progress = (float)spp / data.settings.totalSPP;
+		return true;
+	}
+
+	// ##################################################################################
+	// PUBLIC RENDERING INTERFACE
+	// ##################################################################################
+
+	void clear()
+	{
+		data.film->clear();
+		data.isCompleted = false;
+		data.isDenoised = false;
+	}
+
+	// returns true if rendering is in progress
+	void render()
+	{
+		if (data.isRendering)
+			factory->render();
+		else
+			debug();
+	}
+
+	void draw()
+	{
+		if (data.isRendering)
+		{
+			if (data.isDenoised)
+				drawDenoised();
+			else
+				factory->draw();
+		}
+		else
+		{
+			unsigned char r, g, b;
+			for (unsigned int y = 0; y < data.film->size.y; y++)
+			{
+				for (unsigned int x = 0; x < data.film->size.x; x++)
+				{
+					int spp = data.film->SPP > 0 ? data.film->SPP : 1;
+					data.film->tonemap(x, y, r, g, b, spp, data.settings.toneMap);
+					data.canvas->draw(y * data.film->size.x + x, r, g, b);
+				}
+			}
+		}
+	}
+
+	void denoise()
+	{
+		if (data.isDenoised || !data.settings.denoise)
+			return;
+
+		// create AOVs
+		createAOV(data.aov);
+		// denoise
+		Denoiser denoiser(data.aov.size.x, data.aov.size.y);
+		denoiser.denoise(data.aov);
+		data.isDenoised = true;
+	}
+
+	// ##################################################################################
+	// IMAGE SAVING
+	// ##################################################################################
+
+	void saveHDR(std::string filename) { data.film->save(filename); }
 
 	void savePNG(std::string filename)
 	{
 		stbi_write_png(filename.c_str(), data.canvas->getWidth(), data.canvas->getHeight(), 3, data.canvas->getBackBuffer(), data.canvas->getWidth() * 3);
 	}
 
-	void cycleDrawMode()
-	{
-		if (data.settings.render)
-			return;
+	// ##################################################################################
+	// SETTINGS MODIFICATION
+	// ##################################################################################
 
+	void cycleMode()
+	{
 		clear();
 
+		if (data.isRendering)
+			cycleAlgorithm();
+		else
+			cycleDrawMode();
+	}
+
+	void cycleDrawMode()
+	{
 		if (data.settings.drawMode == DM_ALBEDO)
 			data.settings.drawMode = DM_NORMALS;
 		else if (data.settings.drawMode == DM_NORMALS)
-			data.settings.drawMode = DM_DIRECT;
-		else if (data.settings.drawMode == DM_DIRECT)
 			data.settings.drawMode = DM_LIGHTS;
 		else
 			data.settings.drawMode = DM_ALBEDO;
@@ -313,11 +394,6 @@ public:
 
 	void cycleAlgorithm()
 	{
-		if (!data.settings.render)
-			return;
-
-		clear();
-
 		if (data.settings.algorithm == AL_PATH_TRACE)
 			data.settings.algorithm = AL_LIGHT_TRACE;
 		else if (data.settings.algorithm == AL_LIGHT_TRACE)
@@ -325,13 +401,12 @@ public:
 		else
 			data.settings.algorithm = AL_PATH_TRACE;
 
-		if (data.settings.adaptiveSampling && data.settings.algorithm != AL_PATH_TRACE)
-			data.settings.initSPP = data.settings.totalSPP;
+		factory->setAlgorithm(data.settings.algorithm);
 	}
 
 	void toggleRender()
 	{
 		clear();
-		data.settings.render = !data.settings.render;
+		data.isRendering = !data.isRendering;
 	}
 };

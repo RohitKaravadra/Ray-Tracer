@@ -2,8 +2,15 @@
 
 #include "Algorithm.h"
 
+
+/// <summary>
+/// Light Tracing algorithm implementation.
+/// </summary>
 class LightTracing : public AlgorithmBase
 {
+	/// <summary>
+	/// Path data structure to hold ray, sampler, and path throughput information.
+	/// </summary>
 	struct PathData
 	{
 		Ray& r;
@@ -19,24 +26,28 @@ class LightTracing : public AlgorithmBase
 		}
 	};
 
+	// ##################################################################################
+	// LIGHT TRACING METHODS
+	// ##################################################################################
+
 	void connectToCamera(Vec3 p, Vec3 n, Color col)
 	{
 		Vec2 sp; //screen position
 		// project point on camera if possible
 		if (data.scene->camera.projectOntoCamera(p, sp))
 		{
-			Vec3 toCamDir = (data.scene->camera.origin - p);
+			Vec3 toCamDir = (data.scene->camera.pos - p);
 			float lengthSq = toCamDir.lengthSq();
 			toCamDir = toCamDir.normalize();
 
 			float cosThetaS = Dot(toCamDir, n);
-			float cosThetaC = Dot(toCamDir, data.scene->camera.viewDirection);
+			float cosThetaC = Dot(toCamDir, data.scene->camera.dir);
 
 			float gTerm = max(cosThetaS, 0.0f) * max(-cosThetaC, 0.0f) / lengthSq;
 
 			if (gTerm > 0)
 			{
-				if (data.scene->visible(p, data.scene->camera.origin))
+				if (data.scene->visible(p, data.scene->camera.pos))
 				{
 					float cosThetaSq = SQ(cosThetaC);
 					float we = 1.0f / (cosThetaSq * cosThetaSq * data.scene->camera.Afilm);
@@ -64,7 +75,7 @@ class LightTracing : public AlgorithmBase
 				return;
 
 			// connect to camera and draw pixel
-			Vec3 wi = (data.scene->camera.origin - shadingData.x).normalize();
+			Vec3 wi = (data.scene->camera.pos - shadingData.x).normalize();
 			Color col = path.pathThroughput * shadingData.bsdf->evaluate(shadingData, wi) * path.Le;
 			connectToCamera(shadingData.x, shadingData.sNormal, col);
 
@@ -118,6 +129,10 @@ class LightTracing : public AlgorithmBase
 		lightTracePath(path, 0);
 	}
 
+	// ##################################################################################
+	// RENDERING METHODS
+	// ##################################################################################
+
 	void renderTile(const Vec2i& start, const Vec2i& end, Sampler* sampler)
 	{
 		for (unsigned int y = start.y; y < end.y; y++)
@@ -134,7 +149,7 @@ class LightTracing : public AlgorithmBase
 			start *= data.tileSize;
 
 			Vec2i end = start + Vec2i(data.tileSize, data.tileSize);
-			end = end.Min(Vec2i(data.film->width, data.film->height));
+			end = end.Min(data.film->size);
 
 			renderTile(start, end, data.samplers[id]);
 		}
@@ -154,16 +169,14 @@ class LightTracing : public AlgorithmBase
 			delete data.threads[i];
 		}
 	}
-public:
-	LightTracing(RENDERER_DATA& data) : AlgorithmBase(data) {}
 
-	void render() override
+	void process() override
 	{
-		data.film->incrementSPP();
-
 		if (data.settings.useMultithreading)
 			renderMT();
 		else
-			renderTile(Vec2i(0, 0), Vec2i(data.film->width, data.film->height), data.samplers[0]);
+			renderTile(Vec2i(0, 0), data.film->size, data.samplers[0]);
 	}
+public:
+	LightTracing(RENDERER_DATA& data) : AlgorithmBase(data) {}
 };

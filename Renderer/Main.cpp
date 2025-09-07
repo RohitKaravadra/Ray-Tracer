@@ -9,36 +9,35 @@
 #include "SceneManager.h"
 
 
-// create settings
+/// <summary>
+/// Creates and returns a SETTINGS object initialized with default values.
+/// </summary>
+/// <returns>A SETTINGS object with its fields set to default configuration values.</returns>
 static SETTINGS createSettings()
 {
 	SETTINGS settings;
 
-	settings.render = false;
 	settings.saveRenders = false;
+	settings.debug = false;
+	settings.denoise = true;
 
 	settings.drawMode = DM_ALBEDO;
 	settings.algorithm = AL_PATH_TRACE;
 	settings.toneMap = TM_REINHARD_GLOBAL;
 	settings.filter = FT_BOX;
 
-	settings.debug = false;
-	settings.denoise = false;
-
 	settings.useMultithreading = true;
-	settings.useMis = true;
-
-	settings.adaptiveSampling = false;
-	settings.initSPP = 50;
-	settings.totalSPP = 600;
-
 	settings.numThreads = 8;
+
+	settings.totalSPP = 100;
 	settings.maxBounces = 6;
-	settings.vplRaysPerTile = 1;
 
 	return settings;
 }
 
+/// <summary>
+/// Stats class to keep track of rendering statistics and performance metrics.
+/// </summary>
 class Stats
 {
 	float totalTime;
@@ -86,34 +85,32 @@ public:
 		{
 			completed = true;
 			renderTime = totalTime - renderStartTime;
-			std::cout << "\n Render completed \n\n";
+			std::cout << "\nRender completed in " << std::roundf(renderTime) << " seconds.\n";
 		}
 	}
 
 	bool canInput() const { return totalTime - lastInputTime > 0.1f; }
 
-	bool isCompleted() const { return completed; }
-
-	void print(Renderer& rt) const
+	void print(float progress, int spp) const
 	{
-		float finalTime = completed ? renderTime : totalTime - renderStartTime;
-		float progress = rt.data.settings.render ? rt.getSPP() * 100 / rt.data.settings.totalSPP : 0;
-
 		// Write stats to console
 		std::cout << "\033[F\033[F\033[F\033[F\033[F";
-		std::cout << "Progress   : " << progress << "%                                                \n";
-		std::cout << "Samples    : " << rt.getSPP() << "                                              \n";
-		std::cout << "Time       : " << deltaTime << "                                                \n";
-		std::cout << "FPS        : " << (deltaTime > 0 ? 1.0f / deltaTime : FLT_MAX) << "             \n";
-		std::cout << "Total time : " << std::roundf(totalTime) << " sec                               \n";
+		std::cout << "Progress   : " << progress * 100 << "%                                 \n";
+		std::cout << "Samples    : " << spp << "                                             \n";
+		std::cout << "Time       : " << deltaTime << "                                       \n";
+		std::cout << "FPS        : " << (deltaTime > 0 ? 1.0f / deltaTime : FLT_MAX) << "    \n";
+		std::cout << "Total time : " << std::roundf(totalTime) << " sec                      \n";
 	}
 };
 
+
+/// <summary>
+/// Saves the current render from the given renderer to a PNG file in the 'Renders' directory.
+/// </summary>
+/// <param name="rt">Reference to the Renderer object whose output will be saved.</param>
+/// <param name="filename">The name of the PNG file to save the render as.</param>
 static void saveRender(Renderer& rt, const std::string& filename)
 {
-	if (!rt.data.settings.saveRenders)
-		return;
-
 	const wchar_t* rendersFolder = L"Renders";
 	CreateDirectory(L"Renders", NULL);
 
@@ -122,6 +119,11 @@ static void saveRender(Renderer& rt, const std::string& filename)
 	rt.savePNG(filepath);
 }
 
+
+/// <summary>
+/// Entry point for the ray tracing application. Initializes the scene, window, renderer, and main loop for user interaction and rendering.
+/// </summary>
+/// <returns>Returns 0 upon successful execution.</returns>
 int main()
 {
 	SceneManager sceneManager;
@@ -129,11 +131,11 @@ int main()
 
 	// Create canvas
 	GamesEngineeringBase::Window canvas;
-	canvas.create((unsigned int)sceneManager.curScene->camera.width, (unsigned int)sceneManager.curScene->camera.height, "Tracer", 1.0f);
+	Vec2u screenSize = sceneManager.curScene->camera.size;
+	canvas.create(screenSize.x, screenSize.y, "Ray-Tracer", 1.0f);
 
 	// Create ray tracer
-	Renderer rt;
-	rt.init(sceneManager.curScene, &canvas, createSettings());
+	Renderer rt(sceneManager.curScene, &canvas, createSettings());
 
 	// Create timer
 	GamesEngineeringBase::Timer timer;
@@ -157,7 +159,7 @@ int main()
 		}
 
 		// Update camera and check if it has changed (reset if it has)
-		if (!rt.data.settings.render && sceneManager.viewcamera->update(canvas))
+		if (!rt.isRendering() && sceneManager.viewcamera->update(canvas))
 		{
 			rt.clear();
 			stats.reset();
@@ -170,9 +172,7 @@ int main()
 			if (canvas.keyPressed('R'))
 				rt.toggleRender();
 			else if (canvas.keyPressed(VK_SPACE))
-				rt.cycleDrawMode();
-			else if (canvas.keyPressed(VK_TAB))
-				rt.cycleAlgorithm();
+				rt.cycleMode();
 			else
 				inputChanged = false;
 
@@ -185,42 +185,23 @@ int main()
 
 		canvas.clear();
 
-		if (!stats.isCompleted())
+		if (!rt.isCompleted())
 		{
 			rt.render();
 
-			stats.print(rt);
+			float progress = 0;
+			int spp = 0;
+			rt.getProgress(progress, spp);
+			stats.print(progress, spp);
 
-			if (rt.data.settings.totalSPP <= rt.getSPP() && rt.data.settings.render)
+			if (rt.isCompleted())
 			{
 				stats.onCompletion();
-
-				rt.draw();
-				saveRender(rt, sceneManager.currentSceneName + "_render.png");
-
-				// denoising
-				if (rt.data.settings.denoise)
-				{
-					rt.createAOV(aov);
-					Denoiser denoiser(aov.width, aov.height);
-					denoiser.denoise(aov);
-				}
-
-				rt.draw(aov);
-				saveRender(rt, sceneManager.currentSceneName + "_render_denoised.png");
+				rt.denoise();
 			}
-			else
-				rt.draw();
-		}
-		else
-		{
-			// draw the image
-			if (rt.data.settings.denoise)
-				rt.draw(aov);
-			else
-				rt.draw();
 		}
 
+		rt.draw();
 		canvas.present();
 	}
 

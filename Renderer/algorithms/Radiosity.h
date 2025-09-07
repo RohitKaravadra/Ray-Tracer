@@ -2,8 +2,15 @@
 
 #include "Algorithm.h"
 
-class InstantRadiosity : public AlgorithmBase
+
+/// <summary>
+/// Instant Radiosity implementation.
+/// </summary>
+class Radiosity : public AlgorithmBase
 {
+	/// <summary>
+	/// Path data structure to hold ray, sampler, and path throughput information.
+	/// </summary>
 	struct PathData
 	{
 		Ray& r;
@@ -19,14 +26,22 @@ class InstantRadiosity : public AlgorithmBase
 		}
 	};
 
-	// vertual point light
+	/// <summary>
+	/// VPL (Virtual Point Light) structure to hold shading data and emitted radiance.
+	/// </summary>
 	struct VPL
 	{
 		ShadingData shadingData;
 		Color Le;
 	};
 
-	std::vector<VPL> vpls;
+	const int totalRays = 20.0f;	// total rays per frame
+	int raysPerThread;				// rays per thread
+	std::vector<VPL> vpls;			// list of VPLs
+
+	// ##################################################################################
+	// RADIOSITY METHODS
+	// ##################################################################################
 
 	void VPLTracePath(PathData& path, std::vector<VPL>& vplList, int depth = 0)
 	{
@@ -78,9 +93,7 @@ class InstantRadiosity : public AlgorithmBase
 	{
 		Sampler* sampler = data.samplers[id];
 
-		int total = data.settings.vplRaysPerTile * data.numThreads;
-
-		for (unsigned int i = 0; i < data.settings.vplRaysPerTile; i++)
+		for (unsigned int i = 0; i < raysPerThread; i++)
 		{
 			// Sample a light
 			LightSample light = data.scene->sampleLight(sampler);
@@ -149,6 +162,7 @@ class InstantRadiosity : public AlgorithmBase
 		return accumulated / total;
 	}
 
+	// simple debug function to visualize vpl density
 	float radiosityDebug(const Vec3& p, float& i)
 	{
 		const float rSq = SQ(0.03f);
@@ -188,7 +202,7 @@ class InstantRadiosity : public AlgorithmBase
 
 		// generated new vpls using multi threading
 		for (int i = 0; i < data.numThreads; i++)
-			data.threads[i] = new std::thread(&InstantRadiosity::traceVPLs, this, i, std::ref(vplLists[i]));
+			data.threads[i] = new std::thread(&Radiosity::traceVPLs, this, i, std::ref(vplLists[i]));
 
 		for (int i = 0; i < data.numThreads; i++)
 		{
@@ -204,6 +218,10 @@ class InstantRadiosity : public AlgorithmBase
 			vpls.insert(vpls.end(), v.begin(), v.end());
 		}
 	}
+
+	// ##################################################################################
+	// RENDERING METHODS
+	// ##################################################################################
 
 	void renderTile(const Vec2i& start, const Vec2i& end, const Sampler* sampler)
 	{
@@ -232,7 +250,7 @@ class InstantRadiosity : public AlgorithmBase
 			start *= data.tileSize;
 
 			Vec2i end = start + Vec2i(data.tileSize, data.tileSize);
-			end = end.Min(Vec2i(data.film->width, data.film->height));
+			end = end.Min(data.film->size);
 
 			renderTile(start, end, data.samplers[id]);
 		}
@@ -244,7 +262,7 @@ class InstantRadiosity : public AlgorithmBase
 
 		// process all tiles
 		for (int i = 0; i < data.numThreads; i++)
-			data.threads[i] = new std::thread(&InstantRadiosity::processTiles, this, i);
+			data.threads[i] = new std::thread(&Radiosity::processTiles, this, i);
 
 		for (int i = 0; i < data.numThreads; i++)
 		{
@@ -252,19 +270,19 @@ class InstantRadiosity : public AlgorithmBase
 			delete data.threads[i];
 		}
 	}
-public:
-	InstantRadiosity(RENDERER_DATA& _data) : AlgorithmBase(_data) {
-	}
 
-	void render() override
+	void process() override
 	{
-		data.film->incrementSPP();
-
 		radiosityVplPass();
 
 		if (data.settings.useMultithreading)
 			renderMT();
 		else
-			renderTile(Vec2i(0, 0), Vec2i(data.film->width, data.film->height), data.samplers[0]);
+			renderTile(Vec2i(0, 0), data.film->size, data.samplers[0]);
+	}
+public:
+	Radiosity(RENDERER_DATA& _data) : AlgorithmBase(_data)
+	{
+		raysPerThread = max((float)totalRays / (float)data.numThreads, 1);
 	}
 };

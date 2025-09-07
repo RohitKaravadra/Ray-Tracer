@@ -18,20 +18,17 @@ struct AOV
 	std::vector<float> color;
 	std::vector<float> output;
 
-	unsigned int width;
-	unsigned int height;
+	Vec2u size;
 
 	AOV() = default;
 
-	AOV(unsigned int _width, unsigned int _height)
+	AOV(const Vec2u& size) : size(size)
 	{
-		width = _width;
-		height = _height;
-
-		albedo.resize(width * height * 3, 0);
-		normal.resize(width * height * 3, 0);
-		color.resize(width * height * 3, 0);
-		output.resize(width * height * 3, 0);
+		unsigned int totalSize = size.x * size.y * 3;
+		albedo.resize(totalSize, 0);
+		normal.resize(totalSize, 0);
+		color.resize(totalSize, 0);
+		output.resize(totalSize, 0);
 	}
 };
 
@@ -131,13 +128,13 @@ public:
 	void denoise(AOV& aov)
 	{
 		// Check if OIDN is initialized
-		if (!initialized) 
+		if (!initialized)
 		{
 			std::cerr << ANSI_COLOR_RED << "ERROR: Denoiser not initialized" << ANSI_COLOR_RESET << std::endl;
 			return;
 		}
 
-		try 
+		try
 		{
 			std::cout << ANSI_COLOR_YELLOW << "Starting denoising..." << ANSI_COLOR_RESET << std::endl;
 
@@ -177,7 +174,7 @@ public:
 		}
 	}
 
-	~Denoiser() 
+	~Denoiser()
 	{
 		cleanup();
 	}

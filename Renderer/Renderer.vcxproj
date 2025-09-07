@@ -177,7 +177,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="algorithms\Algorithm.h" />
-    <ClInclude Include="algorithms\InstantRadiosity.h" />
+    <ClInclude Include="algorithms\Radiosity.h" />
     <ClInclude Include="algorithms\LightTracing.h" />
     <ClInclude Include="Bvh.h" />
     <ClInclude Include="Core.h" />
@@ -192,7 +192,6 @@
     <ClInclude Include="math\vectors.h" />
     <ClInclude Include="algorithms\PathTracing.h" />
     <ClInclude Include="Renderer.h" />
-    <ClInclude Include="RendererData.h" />
     <ClInclude Include="Sampling.h" />
     <ClInclude Include="Scene.h" />
     <ClInclude Include="SceneLoader.h" />
@@ -203,6 +202,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="math\vectors.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -297,8 +297,7 @@ class Film
 
 public:
 	Color* film;
-	unsigned int width;
-	unsigned int height;
+	Vec2u size;
 	int SPP;
 	ImageFilter* filter;
 
@@ -321,15 +320,15 @@ public:
 		unsigned int indices[25]; // Store indices to minimize computations 
 		unsigned int used = 0;
 		float total = 0;
-		int size = filter->size();
-		for (int i = -size; i <= size; i++)
+		int _size = filter->size();
+		for (int i = -_size; i <= _size; i++)
 		{
-			for (int j = -size; j <= size; j++)
+			for (int j = -_size; j <= _size; j++)
 			{
 				Vec2i sp = Vec2i(p.x + j, p.y + i);
-				if (sp.x >= 0 && sp.x < width && sp.y >= 0 && sp.y < height)
+				if (sp >= 0 && sp < size)
 				{
-					indices[used] = (sp.y * width) + sp.x;
+					indices[used] = (sp.y * size.x) + sp.x;
 					filterWeights[used] = filter->filter(sp.x - p.x, sp.y - p.y);
 					total += filterWeights[used];
 					used++;
@@ -365,7 +364,7 @@ public:
 	// Tonemap the pixel
 	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, int spp, TONEMAP toneMap = TM_LINEAR)
 	{
-		Color pixel = film[(y * width) + x] / (float)spp;
+		Color pixel = film[(y * size.x) + x] / (float)spp;
 
 		float fr = std::max(pixel.r, 0.0f);
 		float fg = std::max(pixel.g, 0.0f);
@@ -381,24 +380,23 @@ public:
 
 		for (unsigned int x = start.x; x < end.x; x++)
 			for (unsigned int y = start.y; y < end.y; y++)
-				lums.emplace_back(film[y * width + x].Lum());
+				lums.emplace_back(film[y * size.x + x].Lum());
 
 		return lums;
 	}
 
 	// Do not change any code below this line
-	void init(int _width, int _height, IMAGE_FILTER _filter)
+	void init(Vec2u _size, IMAGE_FILTER _filter)
 	{
-		width = _width;
-		height = _height;
-		film = new Color[width * height];
+		size = _size;
+		film = new Color[size.x * size.y];
 		clear();
 		setFilter(_filter);
 	}
 
 	void clear()
 	{
-		memset(film, 0, width * height * sizeof(Color));
+		memset(film, 0, size.x * size.y * sizeof(Color));
 		SPP = 0;
 	}
 
@@ -409,12 +407,12 @@ public:
 
 	void save(std::string filename)
 	{
-		Color* hdrpixels = new Color[width * height];
-		for (unsigned int i = 0; i < (width * height); i++)
+		Color* hdrpixels = new Color[size.x * size.y];
+		for (unsigned int i = 0; i < (size.x * size.y); i++)
 		{
 			hdrpixels[i] = film[i] / (float)SPP;
 		}
-		stbi_write_hdr(filename.c_str(), width, height, 3, (float*)hdrpixels);
+		stbi_write_hdr(filename.c_str(), size.x, size.y, 3, (float*)hdrpixels);
 		delete[] hdrpixels;
 	}
 };

@@ -78,18 +78,18 @@
     <ClInclude Include="algorithms\PathTracing.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="RendererData.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="algorithms\LightTracing.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="algorithms\InstantRadiosity.h">
+    <ClInclude Include="algorithms\Radiosity.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="math\vectors.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
