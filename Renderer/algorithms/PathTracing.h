@@ -20,14 +20,11 @@ class PathTracing : public AlgorithmBase
 		float prevBsdfPdf;
 		bool prevSpecular;
 
-		Color Le;
-
 		PathData(Ray& _r, Sampler*& _sampler) : r(_r), sampler(_sampler)
 		{
 			pathThroughput = Color(1, 1, 1);
 			prevBsdfPdf = 0.0f;
 			prevSpecular = true;
-			Le = Color(0, 0, 0);
 		}
 	};
 
@@ -50,9 +47,10 @@ class PathTracing : public AlgorithmBase
 	// PATH TRACING METHODS
 	// ##################################################################################
 
-	Color computeDirect(ShadingData shadingData, Sampler* sampler)
+	Color computeDirect(const SurfaceData& surfaceData, Sampler* sampler)
 	{
-		if (shadingData.bsdf->isPureSpecular())
+		const ShadingData& shadingData = surfaceData.shadingData;
+		if (surfaceData.bsdf->isPureSpecular())
 		{
 			return Color(0.0f, 0.0f, 0.0f);
 		}
@@ -62,11 +60,11 @@ class PathTracing : public AlgorithmBase
 		if (light.isNull)
 			return Color(0.0f, 0.0f, 0.0f);
 
-		Vec3 wi = light.p - shadingData.x;
+		Vec3 wi = light.p - surfaceData.p;
 		float lengthSq = light.isArea ? wi.lengthSq() : 1.0f;
 		wi = wi.normalize();
 
-		float cosThetaSurface = max(Dot(wi, shadingData.sNormal), 0.0f);
+		float cosThetaSurface = max(Dot(wi, shadingData.n), 0.0f);
 		float gTerm = cosThetaSurface / lengthSq;
 
 		if (light.isArea)
@@ -75,10 +73,10 @@ class PathTracing : public AlgorithmBase
 			gTerm *= cosThetaLight;
 		}
 
-		if (gTerm > 0.0f && data.scene->visible(shadingData.x, light.p))
+		if (gTerm > 0.0f && data.scene->visible(surfaceData.p, light.p))
 		{
-			Color bsdfVal = shadingData.bsdf->evaluate(shadingData, wi);
-			float bsdfPdf = shadingData.bsdf->PDF(shadingData, wi);
+			Color bsdfVal = surfaceData.bsdf->evaluate(shadingData, wi);
+			float bsdfPdf = surfaceData.bsdf->PDF(shadingData, wi);
 
 			float lightPdf = light.pdf * light.pmf;
 
@@ -94,55 +92,51 @@ class PathTracing : public AlgorithmBase
 	Color pathTrace(PathData& path, int depth = 0)
 	{
 		IntersectionData intersection = data.scene->traverse(path.r);
-		ShadingData shadingData = data.scene->calculateShadingData(intersection, path.r);
+		SurfaceData surfaceData = data.scene->calculateShadingData(intersection, path.r);
+		ShadingData& shadingData = surfaceData.shadingData;
 
-		if (shadingData.t < FLT_MAX)
+		if (surfaceData.t < FLT_MAX)
 		{
 			// Handle light hit
-			if (shadingData.bsdf->isLight())
+			if (surfaceData.bsdf->isLight())
 			{
-				path.pathThroughput = path.pathThroughput * shadingData.bsdf->emit(shadingData, path.r.dir);
+				path.pathThroughput = path.pathThroughput * surfaceData.bsdf->emit(shadingData, path.r.dir);
 
 				// if last bsdf was pure specular, we cannot use MIS
 				if (path.prevSpecular)
 					return path.pathThroughput;
 
 				// MIS weight calculation
-				float lightPdf = data.scene->getLightPdf(shadingData.lightIndex, path.r.dir);
+				float lightPdf = data.scene->getLightPdf(surfaceData.lightIndex, path.r.dir);
 				float misWeight = powerHeuristic(path.prevBsdfPdf, lightPdf);
 
 				return path.pathThroughput * misWeight;
 			}
 
 			// Direct lighting (with MIS)
-			Color direct = path.pathThroughput * computeDirect(shadingData, path.sampler);
+			Color direct = path.pathThroughput * computeDirect(surfaceData, path.sampler);
+
+			if (depth >= data.settings.maxBounces)
+				return direct;
 
 			// Russian roulette termination
-			if (depth >= data.settings.maxBounces)
-			{
-				return direct;
-			}
-
 			float rrProbability = min(max(path.pathThroughput.Lum(), 0.05f), 0.95f);
-			if (path.sampler->next() >= rrProbability)
-			{
-				return direct;
-			}
+			if (path.sampler->next() >= rrProbability) return direct;
 			path.pathThroughput = path.pathThroughput / rrProbability;
 
 			// Sample BSDF for next path segment
 			Color bsdf;
 			float bsdfPdf;
-			Vec3 wi = shadingData.bsdf->sample(shadingData, path.sampler, bsdf, bsdfPdf);
+			Vec3 wi = surfaceData.bsdf->sample(shadingData, path.sampler, bsdf, bsdfPdf);
 
 			// Update path throughput
-			float cosTheta = abs(Dot(wi, shadingData.sNormal));
+			float cosTheta = abs(Dot(wi, shadingData.n));
 			path.pathThroughput = (path.pathThroughput * bsdf * cosTheta) / bsdfPdf;
 
 			// Update path data
-			path.r.init(shadingData.x + (wi * EPSILON), wi);
-			path.prevBsdfPdf = shadingData.bsdf->PDF(shadingData, path.r.dir);
-			path.prevSpecular = shadingData.bsdf->isPureSpecular();
+			path.r.init(surfaceData.p + (wi * EPSILON), wi);
+			path.prevBsdfPdf = surfaceData.bsdf->PDF(shadingData, path.r.dir);
+			path.prevSpecular = surfaceData.bsdf->isPureSpecular();
 
 			// Indirect lighting (recursive call)
 			Color indirect = pathTrace(path, depth + 1);

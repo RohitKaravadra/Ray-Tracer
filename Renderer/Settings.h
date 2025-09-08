@@ -3,13 +3,16 @@
 #include "Imaging.h"
 #include "TerminalUI.h"
 
+constexpr int ALGORITHM_COUNT = 4;
 enum ALGORITHM
 {
 	AL_PATH_TRACE,
 	AL_LIGHT_TRACE,
-	AL_INSTANT_RADIOSITY
+	AL_INSTANT_RADIOSITY,
+	AL_BIDIRECTIONAL
 };
 
+constexpr int DRAW_MODE_COUNT = 3;
 enum DRAW_MODE
 {
 	DM_NORMALS,

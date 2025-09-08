@@ -20,6 +20,30 @@ enum IMAGE_FILTER
 	FT_MITCHELL_NETRAVALI
 };
 
+/// <summary>
+/// Texture coordinates structure representing 2D coordinates (u, v) 
+/// Typically used for mapping textures onto 3D models.
+/// always between 0 and 1
+/// </summary>
+class TextCoord
+{
+public:
+	union {
+		struct {
+			float u; // Horizontal coordinate
+			float v; // Vertical coordinate
+		};
+		float uv[2];
+	};
+
+	TextCoord() : u(0), v(0) {}
+	TextCoord(float _u, float _v)
+	{
+		u = std::fabsf(std::fmod(_u, 1.0f));
+		v = std::fabsf(std::fmod(_v, 1.0f));
+	}
+};
+
 class Texture
 {
 public:
@@ -76,11 +100,11 @@ public:
 		}
 		stbi_image_free(textureData);
 	}
-	Color sample(const float tu, const float tv) const
+	Color sample(const TextCoord& uv) const
 	{
 		Color tex;
-		float u = max(0.0f, fabsf(tu)) * width;
-		float v = max(0.0f, fabsf(tv)) * height;
+		float u = uv.u * width;
+		float v = uv.v * height;
 		int x = (int)floorf(u);
 		int y = (int)floorf(v);
 		float frac_u = u - x;
@@ -99,15 +123,15 @@ public:
 		tex = (s[0] * w0) + (s[1] * w1) + (s[2] * w2) + (s[3] * w3);
 		return tex;
 	}
-	float sampleAlpha(const float tu, const float tv) const
+	float sampleAlpha(const TextCoord& uv) const
 	{
 		if (alpha == NULL)
 		{
 			return 1.0f;
 		}
 		float tex;
-		float u = max(0.0f, fabsf(tu)) * width;
-		float v = max(0.0f, fabsf(tv)) * height;
+		float u = uv.u * width;
+		float v = uv.v * height;
 		int x = (int)floorf(u);
 		int y = (int)floorf(v);
 		float frac_u = u - x;

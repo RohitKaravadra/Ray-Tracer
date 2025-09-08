@@ -1,9 +1,8 @@
 #pragma once
 
-#include "Scene.h"
-#include "GamesEngineeringBase.h"
-#include "Settings.h"
-
+#include "../Scene.h"
+#include "../Settings.h"
+#include "../GamesEngineeringBase.h"
 
 /// <summary>
 /// Renderer data structure holding all necessary information for rendering.

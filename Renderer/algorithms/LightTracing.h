@@ -2,7 +2,6 @@
 
 #include "Algorithm.h"
 
-
 /// <summary>
 /// Light Tracing algorithm implementation.
 /// </summary>
@@ -66,18 +65,22 @@ class LightTracing : public AlgorithmBase
 
 		// Traverse the scene to find an intersection
 		IntersectionData intersection = data.scene->traverse(path.r);
-		ShadingData shadingData = data.scene->calculateShadingData(intersection, path.r);
+		SurfaceData surfaceData = data.scene->calculateShadingData(intersection, path.r);
+		ShadingData& shadingData = surfaceData.shadingData;
 
-		if (shadingData.t < FLT_MAX)  // If the ray hits something
+		if (surfaceData.t < FLT_MAX)  // If the ray hits something
 		{
 			// If the hit surface is another light or pure specular, stop
-			if (shadingData.bsdf->isLight() || shadingData.bsdf->isPureSpecular())
+			if (surfaceData.bsdf->isLight())
 				return;
 
-			// connect to camera and draw pixel
-			Vec3 wi = (data.scene->camera.pos - shadingData.x).normalize();
-			Color col = path.pathThroughput * shadingData.bsdf->evaluate(shadingData, wi) * path.Le;
-			connectToCamera(shadingData.x, shadingData.sNormal, col);
+			// connect to camera and draw pixel if not pure specular
+			if (!surfaceData.bsdf->isPureSpecular())
+			{
+				Vec3 wi = (data.scene->camera.pos - surfaceData.p).normalize();
+				Color col = path.pathThroughput * surfaceData.bsdf->evaluate(shadingData, wi) * path.Le;
+				connectToCamera(surfaceData.p, shadingData.n, col);
+			}
 
 			// Russian Roulette for termination
 			float russianRouletteProbability = min(path.pathThroughput.Lum(), 0.9f);
@@ -88,13 +91,13 @@ class LightTracing : public AlgorithmBase
 			// Sample new direction
 			Color bsdf;
 			float pdf;
-			wi = shadingData.bsdf->sample(shadingData, path.sampler, bsdf, pdf);
+			Vec3 wi = surfaceData.bsdf->sample(shadingData, path.sampler, bsdf, pdf);
 
 			// Update path throughput
-			path.pathThroughput = path.pathThroughput * bsdf * fabsf(wi.dot(shadingData.sNormal)) / pdf;
+			path.pathThroughput = path.pathThroughput * bsdf * fabsf(wi.dot(shadingData.n)) / pdf;
 
 			// Create new ray
-			path.r.init(shadingData.x + (wi * EPSILON), wi);
+			path.r.init(surfaceData.p + (wi * EPSILON), wi);
 
 			// Continue tracing the path recursively
 			lightTracePath(path, depth + 1);
@@ -111,7 +114,7 @@ class LightTracing : public AlgorithmBase
 		float pdfDir;
 		Vec3 wi = light.light->sampleDirectionFromLight(sampler, pdfDir);
 
-		ShadingData shadingData;
+		SurfaceData shadingData;
 
 		Color Le = light.emitted / (lightPdf * pdfDir);
 		// normalize light if area light

@@ -50,8 +50,6 @@ public:
 	}
 };
 
-#define EPSILON 0.001f
-
 class Triangle
 {
 	Vec3 invertNormal(const Vec3& n)
@@ -81,8 +79,6 @@ public:
 	Vec3 minP;
 
 	int lightIndex; // Index of the light if this triangle is a light source
-
-	float epsilon = 1e-8f;
 
 	Triangle()
 	{
@@ -147,7 +143,7 @@ public:
 		float det = p.dot(e1);
 
 		// parellel ray check
-		if (std::fabs(det) < epsilon)
+		if (std::fabs(det) < EPSILON2)
 			return false;
 
 		float invDet = 1.0f / det;
@@ -155,33 +151,34 @@ public:
 
 		u = T.dot(p) * invDet;
 
-		if ((u < 0 && fabs(u) > epsilon) || (u > 1 && fabs(u - 1) > epsilon))
+		if ((u < 0 && fabs(u) > EPSILON2) || (u > 1 && fabs(u - 1) > EPSILON2))
 			return false;
 
 		p = Cross(T, e1);
 		v = r.dir.dot(p) * invDet;
 
-		if ((v < 0 && fabs(v) > epsilon) || (u + v > 1 && fabs(u + v - 1) > epsilon))
+		if ((v < 0 && fabs(v) > EPSILON2) || (u + v > 1 && fabs(u + v - 1) > EPSILON2))
 			return false;
 
 		t = e2.dot(p) * invDet;
 
-		if (t < epsilon)
+		if (t < EPSILON2)
 			return false;
 
 		return true;
 	}
 
-	void interpolateAttributes(const float alpha, const float beta, const float gamma, Vec3& interpolatedNormal, float& interpolatedU, float& interpolatedV) const
+	void interpolateAttributes(const float alpha, const float beta, const float gamma, Vec3& interpolatedNormal, TextCoord& interpolatedUV) const
 	{
 		interpolatedNormal = vertices[0].normal * alpha + vertices[1].normal * beta + vertices[2].normal * gamma;
 		interpolatedNormal = interpolatedNormal.normalize();
-		interpolatedU = vertices[0].u * alpha + vertices[1].u * beta + vertices[2].u * gamma;
-		interpolatedV = vertices[0].v * alpha + vertices[1].v * beta + vertices[2].v * gamma;
+		float u = vertices[0].u * alpha + vertices[1].u * beta + vertices[2].u * gamma;
+		float v = vertices[0].v * alpha + vertices[1].v * beta + vertices[2].v * gamma;
+		interpolatedUV = TextCoord(u, v);
 	}
 
 	// Add code here
-	Vec3 sample(Sampler* sampler, float& pdf)
+	Vec3 sample(Sampler* sampler, float& pdf) const
 	{
 		// generate random samples
 		float r1 = sampler->next();
@@ -213,7 +210,7 @@ public:
 		Vec3 ap = p - a;
 
 		float abLenSq = ab.lengthSq();
-		if (abLenSq < epsilon) return false; // degenerate edge
+		if (abLenSq < EPSILON2) return false; // degenerate edge
 
 		Vec3 cross = ab.cross(ap);
 		float distanceSq = cross.lengthSq() / abLenSq;

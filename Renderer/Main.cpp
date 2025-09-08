@@ -20,7 +20,7 @@ static SETTINGS createSettings()
 	settings.denoise = false;
 
 	settings.drawMode = DM_ALBEDO;
-	settings.algorithm = AL_PATH_TRACE;
+	settings.algorithm = AL_BIDIRECTIONAL;
 	settings.toneMap = TM_REINHARD_GLOBAL;
 	settings.filter = FT_BOX;
 
@@ -28,7 +28,7 @@ static SETTINGS createSettings()
 	settings.numThreads = 8;
 
 	settings.totalSPP = 100;
-	settings.maxBounces = 6;
+	settings.maxBounces = 4;
 
 	return settings;
 }
@@ -96,14 +96,10 @@ public:
 		tui::clearRest();
 		if (rendering)
 			tui::print(tui::color::cyan(tui::format("Algorithm  : ", alg,
-				" (Progress   : ", std::to_string((int)(progress * 100)), " %)")));
+				" (Progress   : ", std::to_string((int)(progress * 100)), " % |",
+				" Samples   : ", std::to_string(spp), " )")));
 		else
 			tui::print(tui::color::cyan(tui::format("Algorithm  : ", alg, " (change - TAB , render - R) ")));
-
-		/*tui::print(tui::color::cyan(tui::format("===============  STATS  ===============")));
-		tui::print(tui::color::cyan(tui::format("Samples    : ", std::to_string(spp))));
-		tui::print(tui::color::cyan(tui::format("Time       : ", std::to_string(deltaTime))));
-		tui::print(tui::color::cyan(tui::format("Total time : ", std::to_string(std::roundf(totalTime)))));*/
 	}
 };
 
@@ -122,7 +118,6 @@ static void saveRender(Renderer& rt, const std::string& filename)
 	std::string filepath = renderFolderStr + "/" + filename;
 	rt.savePNG(filepath);
 }
-
 
 static std::string parseArgs(int argc, char* argv[], SETTINGS& settings)
 {
@@ -182,7 +177,7 @@ int main(int argc, char* argv[])
 	std::cout << settings;
 
 	if (argc < 2)
-		sceneManager.load(SCENES::CORNELL_BOX, "scenes");
+		sceneManager.load(SCENES::VEACH_BIDIR, "scenes");
 	else
 	{
 		std::string scenePath = parseArgs(argc, argv, settings);

@@ -31,6 +31,7 @@ class Radiosity : public AlgorithmBase
 	/// </summary>
 	struct VPL
 	{
+		Vec3 p;
 		ShadingData shadingData;
 		Color Le;
 	};
@@ -51,23 +52,25 @@ class Radiosity : public AlgorithmBase
 
 		// Traverse the scene to find an intersection
 		IntersectionData intersection = data.scene->traverse(path.r);
-		ShadingData shadingData = data.scene->calculateShadingData(intersection, path.r);
+		SurfaceData surfaceData = data.scene->calculateShadingData(intersection, path.r);
+		ShadingData& shadingData = surfaceData.shadingData;
 
-		if (shadingData.t < FLT_MAX)  // If the ray hits something
+		if (surfaceData.t < FLT_MAX)  // If the ray hits something
 		{
 			// If the hit surface is another light or pure specular, stop
-			if (shadingData.bsdf->isLight() || shadingData.bsdf->isPureSpecular())
+			if (surfaceData.bsdf->isLight() || surfaceData.bsdf->isPureSpecular())
 				return;
 
 			// Sample new direction
 			Color bsdf;
 			float pdf;
-			Vec3 wi = shadingData.bsdf->sample(shadingData, path.sampler, bsdf, pdf);
+			Vec3 wi = surfaceData.bsdf->sample(shadingData, path.sampler, bsdf, pdf);
 
 			// Update path throughput
-			path.pathThroughput = path.pathThroughput * bsdf * fabsf(wi.dot(shadingData.sNormal)) / pdf;
+			path.pathThroughput = path.pathThroughput * bsdf * fabsf(wi.dot(shadingData.n)) / pdf;
 
 			VPL vpl;
+			vpl.p = surfaceData.p;
 			vpl.shadingData = shadingData;
 			vpl.Le = path.pathThroughput * path.Le;
 
@@ -82,7 +85,7 @@ class Radiosity : public AlgorithmBase
 			path.pathThroughput = path.pathThroughput / russianRouletteProbability;
 
 			// Create new ray
-			path.r.init(shadingData.x + (wi * EPSILON), wi);
+			path.r.init(surfaceData.p + (wi * EPSILON), wi);
 
 			// Continue tracing the path recursively
 			VPLTracePath(path, vplList, depth + 1);
@@ -103,7 +106,7 @@ class Radiosity : public AlgorithmBase
 			float pdfDir;
 			Vec3 wi = light.light->sampleDirectionFromLight(sampler, pdfDir);
 
-			ShadingData shadingData;
+			SurfaceData shadingData;
 
 			Color Le = light.emitted / (lightPdf * pdfDir);
 			// normalize light if area light
@@ -111,7 +114,8 @@ class Radiosity : public AlgorithmBase
 				Le = Le * max(Dot(wi, light.n), 0);
 
 			VPL vpl;
-			vpl.shadingData = ShadingData(light.p, light.n);
+			vpl.p = light.p;
+			vpl.shadingData = ShadingData(light.n);
 			vpl.Le = Le;
 
 			// update vpls list
@@ -126,17 +130,19 @@ class Radiosity : public AlgorithmBase
 		}
 	}
 
-	Color radiosityComputeDirect(ShadingData shadingData, Sampler* sampler)
+	Color radiosityComputeDirect(const SurfaceData& surfaceData, Sampler* sampler)
 	{
+		const ShadingData& shadingData = surfaceData.shadingData;
+
 		// Is surface is specular we cannot computing direct lighting
-		if (shadingData.bsdf->isPureSpecular() == true)
+		if (surfaceData.bsdf->isPureSpecular() == true)
 		{
 			return Color(0.0f, 0.0f, 0.0f);
 		}
 
-		if (shadingData.bsdf->isLight())
+		if (surfaceData.bsdf->isLight())
 		{
-			return shadingData.bsdf->emit(shadingData, shadingData.wo);
+			return surfaceData.bsdf->emit(shadingData, shadingData.wo);
 		}
 
 		Color accumulated(0.0f, 0.0f, 0.0f);
@@ -148,16 +154,16 @@ class Radiosity : public AlgorithmBase
 			VPL vpl = vpls[i];
 
 			// Calculate G Term
-			Vec3 wi = vpl.shadingData.x - shadingData.x;
+			Vec3 wi = vpl.p - surfaceData.p;
 			float lengthSq = wi.lengthSq();
 			wi = wi.normalize();
 
-			float gTerm = (max(Dot(wi, shadingData.sNormal), 0.0f) *
-				max(-Dot(wi, vpl.shadingData.sNormal), 0.0f)) / lengthSq;
+			float gTerm = (max(Dot(wi, shadingData.n), 0.0f) *
+				max(-Dot(wi, vpl.shadingData.n), 0.0f)) / lengthSq;
 
 			// Shade if visible
-			if (gTerm > 0 && data.scene->visible(shadingData.x, vpl.shadingData.x))
-				accumulated = accumulated + shadingData.bsdf->evaluate(shadingData, wi) * vpl.Le * gTerm;
+			if (gTerm > 0 && data.scene->visible(surfaceData.p, vpl.p))
+				accumulated = accumulated + surfaceData.bsdf->evaluate(shadingData, wi) * vpl.Le * gTerm;
 		}
 		return accumulated / total;
 	}
@@ -168,7 +174,7 @@ class Radiosity : public AlgorithmBase
 		const float rSq = SQ(0.03f);
 		for (const VPL& vpl : vpls)
 		{
-			float lSq = (vpl.shadingData.x - p).lengthSq();
+			float lSq = (vpl.p - p).lengthSq();
 			if (lSq < rSq)
 			{
 				i = lSq / rSq;
@@ -182,16 +188,16 @@ class Radiosity : public AlgorithmBase
 	{
 		// Traverse the scene to find an intersection
 		IntersectionData intersection = data.scene->traverse(r);
-		ShadingData shadingData = data.scene->calculateShadingData(intersection, r);
+		SurfaceData surfaceData = data.scene->calculateShadingData(intersection, r);
 
 		if (data.settings.debug)
 		{
 			float i;
-			if (radiosityDebug(shadingData.x, i))
+			if (radiosityDebug(surfaceData.p, i))
 				return Color(1.0f, 0.0f, 0.0f) * (1.0f - i) + Color(1.0f, 1.0f, 0.0f) * i;
 		}
 
-		return shadingData.t < FLT_MAX ? radiosityComputeDirect(shadingData, sampler) :
+		return surfaceData.t < FLT_MAX ? radiosityComputeDirect(surfaceData, sampler) :
 			data.scene->background->evaluate(r.dir);
 	}
 

@@ -121,6 +121,7 @@ Vec2u Vec2u::Max(const Vec2u& other) { return Vec2u(x > other.x ? x : other.x, y
 // #################################################################################################
 
 Vec3::Vec3() : x(0), y(0), z(0), w(1.0f) {}
+Vec3::Vec3(float a) : x(a), y(a), z(a), w(1.0f) {}
 Vec3::Vec3(float _x, float _y, float _z) : x(_x), y(_y), z(_z), w(1.0f) {}
 Vec3::Vec3(float _x, float _y, float _z, float _w) : x(_x), y(_y), z(_z), w(_w) {}
 

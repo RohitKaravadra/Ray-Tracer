@@ -5,121 +5,13 @@
 #define _USE_MATH_DEFINES
 #include "math/vectors.h"
 #include "math/matrix.h"
+#include "math/color.h"
+
+constexpr auto EPSILON = 1e-3f;
+constexpr auto EPSILON2 = 1e-7f;
 
 // Stop warnings about M_PI being a double
 #pragma warning( disable : 4244)
-
-#define SQ(x) (x * x)
-#define min(a,b) ((a < b) ? a : b)
-#define max(a,b) ((a > b) ? a : b)
-
-template <typename T>
-constexpr const T& clamp(const T& value, const T& low, const T& high)
-{
-	return (value < low) ? low : (value > high) ? high : value;
-}
-
-class Color
-{
-public:
-	union
-	{
-		struct
-		{
-			float r, g, b;
-		};
-		float rgb[3];
-	};
-
-	Color() { r = 0; g = 0; b = 0; }
-	Color(float a) {
-		r = g = b = a;
-	}
-	Color(float _r, float _g, float _b)
-	{
-		r = _r;
-		g = _g;
-		b = _b;
-	}
-	Color(unsigned char _r, unsigned char _g, unsigned char _b, unsigned char _a)
-	{
-		r = (float)_r / 255.0f;
-		g = (float)_g / 255.0f;
-		b = (float)_b / 255.0f;
-	}
-	void ToRGB(unsigned char& cr, unsigned char& cg, unsigned char& cb)
-	{
-		cr = (unsigned char)(r * 255);
-		cg = (unsigned char)(g * 255);
-		cb = (unsigned char)(b * 255);
-	}
-	Color operator+(const Color& colour) const
-	{
-		Color c;
-		c.r = r + colour.r;
-		c.g = g + colour.g;
-		c.b = b + colour.b;
-		return c;
-	}
-	Color operator-(const Color& colour) const
-	{
-		Color c;
-		c.r = r - colour.r;
-		c.g = g - colour.g;
-		c.b = b - colour.b;
-		return c;
-	}
-	Color operator*(const Color& colour) const
-	{
-		Color c;
-		c.r = r * colour.r;
-		c.g = g * colour.g;
-		c.b = b * colour.b;
-		return c;
-	}
-	Color operator*=(const Color& colour) const
-	{
-		Color c;
-		c.r = r * colour.r;
-		c.g = g * colour.g;
-		c.b = b * colour.b;
-		return c;
-	}
-	Color operator/(const Color& colour) const
-	{
-		Color c;
-		c.r = r / colour.r;
-		c.g = g / colour.g;
-		c.b = b / colour.b;
-		return c;
-	}
-	Color operator*(const float v) const
-	{
-		Color c;
-		c.r = r * v;
-		c.g = g * v;
-		c.b = b * v;
-		return c;
-	}
-	Color operator/(const float v) const
-	{
-		Color c;
-		c.r = r / v;
-		c.g = g / v;
-		c.b = b / v;
-		return c;
-	}
-	float Lum()
-	{
-		return ((0.2126f * r) + (0.7152f * g) + (0.0722f * b));
-	}
-
-	Color normalize()
-	{
-		float l = 1.0f / sqrtf((r * r) + (g * g) + (b * b));
-		return Color(r * l, g * l, b * l);
-	}
-};
 
 struct Vertex
 {

@@ -177,6 +177,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="algorithms\Algorithm.h" />
+    <ClInclude Include="algorithms\Bidirectional.h" />
+    <ClInclude Include="Camera.h" />
+    <ClInclude Include="math\mathdefines.h" />
     <ClInclude Include="algorithms\Radiosity.h" />
     <ClInclude Include="algorithms\LightTracing.h" />
     <ClInclude Include="Bvh.h" />
@@ -188,6 +191,7 @@
     <ClInclude Include="Imaging.h" />
     <ClInclude Include="Lights.h" />
     <ClInclude Include="Materials.h" />
+    <ClInclude Include="math\color.h" />
     <ClInclude Include="math\matrix.h" />
     <ClInclude Include="math\vectors.h" />
     <ClInclude Include="algorithms\PathTracing.h" />
@@ -203,6 +207,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="math\color.cpp" />
     <ClCompile Include="math\vectors.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

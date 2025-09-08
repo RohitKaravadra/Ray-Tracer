@@ -8,27 +8,15 @@
 
 class BSDF;
 
-class ShadingData
+struct ShadingData
 {
-public:
-	Vec3 x;
-	Vec3 wo;
-	Vec3 sNormal;
-	Vec3 gNormal;
-	float tu;
-	float tv;
-	Frame frame;
-	BSDF* bsdf;
-	float t;
-	int lightIndex; // Index of the light if this is a light source
-	ShadingData() {}
-	ShadingData(Vec3 _x, Vec3 n)
-	{
-		x = _x;
-		gNormal = n;
-		sNormal = n;
-		bsdf = NULL;
-	}
+	TextCoord uv;	// Texture coordinates
+	Frame frame;	// Shading frame
+	Vec3 n;			// Shading normal
+	Vec3 wo;		// Outgoing direction (to camera)
+
+	ShadingData() = default;
+	ShadingData(Vec3 n) : n(n) {};
 };
 
 // Physical Constants
@@ -116,12 +104,12 @@ class BSDF
 {
 public:
 	Color emission;
-	virtual Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf) = 0;
+	virtual Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf) const = 0;
 	virtual Color evaluate(const ShadingData& shadingData, const Vec3& wi) = 0;
 	virtual float PDF(const ShadingData& shadingData, const Vec3& wi) = 0;
 	virtual bool isPureSpecular() = 0;
 	virtual bool isTwoSided() = 0;
-	bool isLight()
+	bool isLight() const
 	{
 		return emission.Lum() > 0 ? true : false;
 	}
@@ -129,7 +117,7 @@ public:
 	{
 		emission = _emission;
 	}
-	Color emit(const ShadingData& shadingData, const Vec3& wi) {
+	Color emit(const ShadingData& shadingData, const Vec3& wi) const {
 		return emission;
 	}
 	virtual float mask(const ShadingData& shadingData) = 0;
@@ -140,39 +128,47 @@ class DiffuseBSDF : public BSDF
 {
 public:
 	Texture* albedo;
+
 	DiffuseBSDF() = default;
+
 	DiffuseBSDF(Texture* _albedo)
 	{
 		albedo = _albedo;
 	}
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
+
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf) const
 	{
 		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
+		reflectedColour = albedo->sample(shadingData.uv) / M_PI;
 		pdf = wi.z / M_PI;
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
 		return shadingData.frame.toWorld(wi);
 	}
+
 	Color evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
-		return albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
+		return albedo->sample(shadingData.uv) / M_PI;
 	}
+
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Add correct PDF code here
 		Vec3 localWi = shadingData.frame.toLocal(wi);
 		return localWi.z / M_PI;
 	}
+
 	bool isPureSpecular()
 	{
 		return false;
 	}
+
 	bool isTwoSided()
 	{
 		return true;
 	}
+
 	float mask(const ShadingData& shadingData)
 	{
-		return albedo->sampleAlpha(shadingData.tu, shadingData.tv);
+		return albedo->sampleAlpha(shadingData.uv);
 	}
 };
 
@@ -186,11 +182,13 @@ public:
 	const Color k = Aluminium_K;
 
 	MirrorBSDF() = default;
+
 	MirrorBSDF(Texture* _albedo)
 	{
 		albedo = _albedo;
 	}
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
+
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf) const
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 
@@ -199,34 +197,38 @@ public:
 
 		// Compute Fresnel reflection coefficient
 		Color F = ShadingHelper::fresnelConductor(fabs(localWo.z), eta, k);
-
-		// sample albedo
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * F / fabs(wi.z);
 		pdf = 1.0f;
 
+		// sample albedo
+		reflectedColour = albedo->sample(shadingData.uv) * F / fabs(wi.z);
 		return shadingData.frame.toWorld(wi);
 	}
+
 	Color evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Replace this with Mirror evaluation code
-		return albedo->sample(shadingData.tu, shadingData.tv) / fabsf(shadingData.frame.toLocal(wi).z);
+		return albedo->sample(shadingData.uv) / fabsf(shadingData.frame.toLocal(wi).z);
 	}
+
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Replace this with Mirror PDF
 		return 0.0f;
 	}
+
 	bool isPureSpecular()
 	{
 		return true;
 	}
+
 	bool isTwoSided()
 	{
 		return true;
 	}
+
 	float mask(const ShadingData& shadingData)
 	{
-		return albedo->sampleAlpha(shadingData.tu, shadingData.tv);
+		return albedo->sampleAlpha(shadingData.uv);
 	}
 };
 
@@ -238,6 +240,7 @@ public:
 	Color eta;
 	Color k;
 	float alpha;
+
 	ConductorBSDF() = default;
 
 	ConductorBSDF(Texture* _albedo, Color _eta, Color _k, float roughness)
@@ -248,12 +251,12 @@ public:
 		alpha = 1.62142f * sqrtf(roughness);
 	}
 
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf) const
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 
 		// sample albedo
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv);
+		reflectedColour = albedo->sample(shadingData.uv);
 
 		Vec3 wi;
 
@@ -301,7 +304,7 @@ public:
 	{
 		// treat as mirror
 		if (alpha < EPSILON)
-			return albedo->sample(shadingData.tu, shadingData.tv) / fabsf(shadingData.frame.toLocal(wi).z);
+			return albedo->sample(shadingData.uv) / fabsf(shadingData.frame.toLocal(wi).z);
 
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);	// outgoing direction
 		Vec3 localWi = shadingData.frame.toLocal(wi);				// incoming direction
@@ -314,7 +317,7 @@ public:
 		float ggx = ShadingHelper::Gggx(localWi, localWo, alpha);	// shadowing term
 
 		// compute the reflected colour
-		return albedo->sample(shadingData.tu, shadingData.tv) * F * D * ggx / (4.0f * fabsf(localWo.z) * fabsf(localWi.z));
+		return albedo->sample(shadingData.uv) * F * D * ggx / (4.0f * fabsf(localWo.z) * fabsf(localWi.z));
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
@@ -344,7 +347,7 @@ public:
 
 	float mask(const ShadingData& shadingData)
 	{
-		return albedo->sampleAlpha(shadingData.tu, shadingData.tv);
+		return albedo->sampleAlpha(shadingData.uv);
 	}
 };
 
@@ -359,6 +362,7 @@ public:
 	float invEta;
 
 	GlassBSDF() = default;
+
 	GlassBSDF(Texture* _albedo, float _intIOR, float _extIOR)
 	{
 		albedo = _albedo;
@@ -369,19 +373,20 @@ public:
 		invEta = 1.0f / eta;
 	}
 
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf) const
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
-		Vec3 N = shadingData.sNormal;
+		Vec3 N = shadingData.n;
 
 		// sample albedo
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv);
+		reflectedColour = albedo->sample(shadingData.uv);
 
 		float cosThetaI = localWo.z;
 		float eta = cosThetaI < 0.0f ? this->eta : this->invEta;
 		float F = ShadingHelper::fresnelDielectric(fabsf(cosThetaI), eta);
 
 		Vec3 wi;
+
 		float absCosThetaI = fabsf(cosThetaI);
 
 		if (sampler->next() < F) {
@@ -433,7 +438,7 @@ public:
 
 	float mask(const ShadingData& shadingData)
 	{
-		return albedo->sampleAlpha(shadingData.tu, shadingData.tv);
+		return albedo->sampleAlpha(shadingData.uv);
 	}
 };
 
@@ -444,7 +449,9 @@ public:
 	float intIOR;
 	float extIOR;
 	float alpha;
+
 	DielectricBSDF() = default;
+
 	DielectricBSDF(Texture* _albedo, float _intIOR, float _extIOR, float roughness)
 	{
 		albedo = _albedo;
@@ -452,37 +459,42 @@ public:
 		extIOR = _extIOR;
 		alpha = 1.62142f * sqrtf(roughness);
 	}
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
+
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf) const
 	{
 		// Replace this with Dielectric sampling code
 		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
+		reflectedColour = albedo->sample(shadingData.uv) / M_PI;
 		pdf = wi.z / M_PI;
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
-		wi = shadingData.frame.toWorld(wi);
-		return wi;
+		return shadingData.frame.toWorld(wi);
 	}
+
 	Color evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Replace this with Dielectric evaluation code
-		return albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
+		return albedo->sample(shadingData.uv) / M_PI;
 	}
+
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Replace this with Dielectric PDF
 		Vec3 wiLocal = shadingData.frame.toLocal(wi);
 		return SamplingDistributions::cosineHemispherePDF(wiLocal);
 	}
+
 	bool isPureSpecular()
 	{
 		return false;
 	}
+
 	bool isTwoSided()
 	{
 		return false;
 	}
+
 	float mask(const ShadingData& shadingData)
 	{
-		return albedo->sampleAlpha(shadingData.tu, shadingData.tv);
+		return albedo->sampleAlpha(shadingData.uv);
 	}
 };
 
@@ -505,7 +517,7 @@ public:
 		B = (0.45 * sigma * sigma) / (sigma * sigma + 0.09f);
 	}
 
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf) const
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 
@@ -520,9 +532,9 @@ public:
 		Vec3 wi(sinTheta * cosf(phiI), sinTheta * sinf(phiI), r1);
 		float demon = (A + B * max(cosf(phiI - phiO), 0.0f) * sinf(max(thetaI, thetaO) * tanf(min(thetaI, thetaO))));
 
-		pdf = fabsf(wi.z) / M_PI;
-		reflectedColour = (albedo->sample(shadingData.tu, shadingData.tv) / M_PI) * demon;
+		reflectedColour = (albedo->sample(shadingData.uv) / M_PI) * demon;
 
+		pdf = wi.z / M_PI;
 		return shadingData.frame.toWorld(wi);
 	}
 
@@ -539,7 +551,7 @@ public:
 
 		float demon = (A + B * max(cosf(phiI - phiO), 0.0f) * sinf(max(thetaI, thetaO) * tanf(min(thetaI, thetaO))));
 
-		return (albedo->sample(shadingData.tu, shadingData.tv) / M_PI) * demon;
+		return (albedo->sample(shadingData.uv) / M_PI) * demon;
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
@@ -561,7 +573,7 @@ public:
 
 	float mask(const ShadingData& shadingData)
 	{
-		return albedo->sampleAlpha(shadingData.tu, shadingData.tv);
+		return albedo->sampleAlpha(shadingData.uv);
 	}
 };
 
@@ -589,10 +601,10 @@ public:
 		e = (2.0f / SQ(max(alpha, 0.001f))) - 2.0f;
 	}
 
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf) const
 	{
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
-		Color col = albedo->sample(shadingData.tu, shadingData.tv);
+		Color col = albedo->sample(shadingData.uv);
 
 		Vec3 wi, wr(-localWo.x, -localWo.y, localWo.z);
 
@@ -618,12 +630,12 @@ public:
 		// compute the PDF
 		float diffPdf = (1.0f - F) * fabsf(wi.z) / M_PI;
 		float specPdf = F * (e + 1.0f) * powf(cosAlpha, e) / (2.0f * M_PI);
+		pdf = diffPdf + specPdf;
 
 		// diffuse and specular components
 		float diff = (1.0f - F) / M_PI;
 		float spec = F * (e + 2.0f) * powf(cosAlpha, e) / (2.0f * M_PI);
 
-		pdf = diffPdf + specPdf;
 		reflectedColour = col * (diff + spec);
 
 		return shadingData.frame.toWorld(wi);
@@ -634,7 +646,7 @@ public:
 		Vec3 localWo = shadingData.frame.toLocal(shadingData.wo);
 		Vec3 localWi = shadingData.frame.toLocal(wi);
 
-		Color col = albedo->sample(shadingData.tu, shadingData.tv);
+		Color col = albedo->sample(shadingData.uv);
 
 		float F = ShadingHelper::fresnelDielectric(std::abs(localWi.z), eta);
 
@@ -677,7 +689,7 @@ public:
 
 	float mask(const ShadingData& shadingData)
 	{
-		return albedo->sampleAlpha(shadingData.tu, shadingData.tv);
+		return albedo->sampleAlpha(shadingData.uv);
 	}
 };
 
@@ -689,7 +701,9 @@ public:
 	float thickness;
 	float intIOR;
 	float extIOR;
+
 	LayeredBSDF() = default;
+
 	LayeredBSDF(BSDF* _base, Color _sigmaa, float _thickness, float _intIOR, float _extIOR)
 	{
 		base = _base;
@@ -698,29 +712,35 @@ public:
 		intIOR = _intIOR;
 		extIOR = _extIOR;
 	}
-	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf)
+
+	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Color& reflectedColour, float& pdf) const
 	{
 		// Add code to include layered sampling
 		return base->sample(shadingData, sampler, reflectedColour, pdf);
 	}
+
 	Color evaluate(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Add code for evaluation of layer
 		return base->evaluate(shadingData, wi);
 	}
+
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Add code to include PDF for sampling layered BSDF
 		return base->PDF(shadingData, wi);
 	}
+
 	bool isPureSpecular()
 	{
 		return base->isPureSpecular();
 	}
+
 	bool isTwoSided()
 	{
 		return true;
 	}
+
 	float mask(const ShadingData& shadingData)
 	{
 		return base->mask(shadingData);

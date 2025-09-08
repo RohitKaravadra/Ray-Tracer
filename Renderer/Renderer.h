@@ -8,29 +8,47 @@
 #include "algorithms/PathTracing.h"
 #include "algorithms/LightTracing.h"
 #include "algorithms/Radiosity.h"
+#include "algorithms/Bidirectional.h"
 
 /// <summary>
 /// Manages and selects different rendering algorithms for use in rendering operations.
 /// </summary>
-class AlgorithmFactory
-{
-	std::map<ALGORITHM, std::unique_ptr<Algorithm>> algorithms;
-	ALGORITHM currentAlgorithm;
+class AlgorithmFactory {
+	std::map<ALGORITHM, std::shared_ptr<Algorithm>> algorithms;
+
 public:
-	AlgorithmFactory(RENDERER_DATA& data)
-	{
-		algorithms[AL_PATH_TRACE] = std::make_unique<PathTracing>(data);
-		algorithms[AL_LIGHT_TRACE] = std::make_unique<LightTracing>(data);
-		algorithms[AL_INSTANT_RADIOSITY] = std::make_unique<Radiosity>(data);
-		currentAlgorithm = AL_PATH_TRACE;
+
+	std::weak_ptr<Algorithm> getAlgorithm(RENDERER_DATA& data) {
+		ALGORITHM algorithm = data.settings.algorithm;
+
+		// check if algorithm exists
+		auto it = algorithms.find(algorithm);
+		if (it != algorithms.end())
+			return it->second;
+
+		// if not, create a new one
+		switch (algorithm) {
+		case AL_PATH_TRACE:
+			algorithms[algorithm] = std::make_shared<PathTracing>(data);
+			break;
+		case AL_LIGHT_TRACE:
+			algorithms[algorithm] = std::make_shared<LightTracing>(data);
+			break;
+		case AL_INSTANT_RADIOSITY:
+			algorithms[algorithm] = std::make_shared<Radiosity>(data);
+			break;
+		case AL_BIDIRECTIONAL:
+			algorithms[algorithm] = std::make_shared<Bidirectional>(data);
+			break;
+		default:
+			return !algorithms.empty()
+				? algorithms.begin()->second
+				: std::weak_ptr<Algorithm>();
+		}
+
+		return algorithms[algorithm];
 	}
-
-	void render() { algorithms[currentAlgorithm]->render(); }
-	void draw() { algorithms[currentAlgorithm]->draw(); }
-	int getSpp(int index) { return algorithms[currentAlgorithm]->getSpp(index); }
-	void setAlgorithm(ALGORITHM algo) { currentAlgorithm = algo; }
 };
-
 
 /// <summary>
 /// Renderer class that handles rendering operations using different algorithms.
@@ -39,6 +57,7 @@ class Renderer
 {
 	RENDERER_DATA data;							// renderer data used by all algorithms
 	std::unique_ptr<AlgorithmFactory> factory;	// algorithm factory
+	std::weak_ptr<Algorithm> currAlgorithm;		// current algorithm
 
 	// ##################################################################################
 	// DATA SETUP
@@ -86,14 +105,15 @@ class Renderer
 	Color albedo(Ray& r)
 	{
 		IntersectionData intersection = data.scene->traverse(r);
-		ShadingData shadingData = data.scene->calculateShadingData(intersection, r);
-		if (shadingData.t < FLT_MAX)
+		SurfaceData surfaceData = data.scene->calculateShadingData(intersection, r);
+		ShadingData& shadingData = surfaceData.shadingData;
+		if (surfaceData.t < FLT_MAX)
 		{
-			if (shadingData.bsdf->isLight())
+			if (surfaceData.bsdf->isLight())
 			{
-				return shadingData.bsdf->emit(shadingData, shadingData.wo);
+				return surfaceData.bsdf->emit(shadingData, shadingData.wo);
 			}
-			return shadingData.bsdf->evaluate(shadingData, Vec3(0, 1, 0));
+			return surfaceData.bsdf->evaluate(shadingData, Vec3(0, 1, 0));
 		}
 		return data.scene->background->evaluate(r.dir);
 	}
@@ -103,8 +123,9 @@ class Renderer
 		IntersectionData intersection = data.scene->traverse(r);
 		if (intersection.t < FLT_MAX)
 		{
-			ShadingData shadingData = data.scene->calculateShadingData(intersection, r);
-			return Color(fabsf(shadingData.sNormal.x), fabsf(shadingData.sNormal.y), fabsf(shadingData.sNormal.z));
+			SurfaceData surfaceData = data.scene->calculateShadingData(intersection, r);
+			ShadingData& shadingData = surfaceData.shadingData;
+			return Color(fabsf(shadingData.n.x), fabsf(shadingData.n.y), fabsf(shadingData.n.z));
 		}
 		return Color(0.0f, 0.0f, 0.0f);
 	}
@@ -221,7 +242,11 @@ class Renderer
 				unsigned int index = y * aov.size.x + x;
 
 				sppIndex = sppY + x / data.tileSize;
-				spp = factory->getSpp(sppIndex);
+
+				if (auto algo = currAlgorithm.lock())
+					spp = algo.get()->getSpp(sppIndex);
+				else
+					throw std::runtime_error(" No algorithm assigned ");
 
 				// set colour
 				Color col = data.film->film[index] / (float)spp;
@@ -275,7 +300,8 @@ public:
 		setMultithreadingData(data.settings.numThreads);
 		setTileData();
 
-		factory = std::make_unique<AlgorithmFactory>(data);
+		factory = std::make_unique<AlgorithmFactory>();
+		currAlgorithm = factory->getAlgorithm(data);
 	}
 
 	~Renderer()
@@ -296,6 +322,7 @@ public:
 		case AL_PATH_TRACE:return "Path Tracing";
 		case AL_LIGHT_TRACE:return "Light Tracing";
 		case AL_INSTANT_RADIOSITY:return "Instant Radiosity";
+		case AL_BIDIRECTIONAL:return "Bidirectional";
 		default:return "Unknown";
 		}
 	}
@@ -325,7 +352,12 @@ public:
 	void render()
 	{
 		if (data.isRendering)
-			factory->render();
+		{
+			if (auto algo = currAlgorithm.lock())
+				algo.get()->render();
+			else
+				tui::print(tui::color::yellow("WARNING: No algorithm Assigned, can't render"));
+		}
 		else
 			debug();
 	}
@@ -337,7 +369,12 @@ public:
 			if (data.isDenoised)
 				drawDenoised();
 			else
-				factory->draw();
+			{
+				if (auto algo = currAlgorithm.lock())
+					algo.get()->draw();
+				else
+					tui::print(tui::color::yellow("WARNING: No algorithm Assigned, can't draw"));
+			}
 		}
 		else
 		{
@@ -371,7 +408,29 @@ public:
 	// IMAGE SAVING
 	// ##################################################################################
 
-	void saveHDR(std::string filename) { data.film->save(filename); }
+	void saveHDR(std::string filename)
+	{
+		if (auto algo = currAlgorithm.lock())
+		{
+			int total = data.film->size.x * data.film->size.y;
+			Color* hdrpixels = new Color[total];
+
+			int sppY, spp, pixelY;
+			for (unsigned int y = 0; y < data.film->size.y; y++)
+			{
+				pixelY = y * data.film->size.x;
+				sppY = (y / data.tileSize) * data.totalXTiles;
+				for (unsigned int x = 0; x < data.film->size.x; x++)
+				{
+					spp = max(algo.get()->getSpp(sppY + x / data.tileSize), 1);
+					hdrpixels[pixelY + x] = data.film->film[pixelY + x] / (float)spp;
+				}
+			}
+
+			stbi_write_hdr(filename.c_str(), data.film->size.x, data.film->size.y, 3, (float*)hdrpixels);
+			delete[] hdrpixels;
+		}
+	}
 
 	void savePNG(std::string filename)
 	{
@@ -385,32 +444,16 @@ public:
 
 	void cycleDrawMode()
 	{
-		if (data.isRendering)
-			return;
-
+		if (data.isRendering) return;
 		clear();
-
-		if (data.settings.drawMode == DM_ALBEDO)
-			data.settings.drawMode = DM_NORMALS;
-		else if (data.settings.drawMode == DM_NORMALS)
-			data.settings.drawMode = DM_LIGHTS;
-		else
-			data.settings.drawMode = DM_ALBEDO;
+		data.settings.drawMode = (DRAW_MODE)((data.settings.drawMode + 1) % DRAW_MODE_COUNT);
 	}
 
 	void cycleAlgorithm()
 	{
-		if (data.isRendering)
-			return;
-
-		if (data.settings.algorithm == AL_PATH_TRACE)
-			data.settings.algorithm = AL_LIGHT_TRACE;
-		else if (data.settings.algorithm == AL_LIGHT_TRACE)
-			data.settings.algorithm = AL_INSTANT_RADIOSITY;
-		else
-			data.settings.algorithm = AL_PATH_TRACE;
-
-		factory->setAlgorithm(data.settings.algorithm);
+		if (data.isRendering) return;
+		data.settings.algorithm = (ALGORITHM)((data.settings.algorithm + 1) % ALGORITHM_COUNT);
+		currAlgorithm = factory->getAlgorithm(data);
 	}
 
 	void toggleRender()

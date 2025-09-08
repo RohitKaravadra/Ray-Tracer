@@ -87,12 +87,27 @@
     <ClInclude Include="TerminalUI.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="algorithms\Bidirectional.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="math\color.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="math\mathdefines.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Camera.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="math\vectors.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="math\color.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

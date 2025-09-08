@@ -1,6 +1,5 @@
 ﻿#pragma once
 
-#include "Core.h"
 #include "Geometry.h"
 #include "Materials.h"
 #include "Sampling.h"
@@ -51,11 +50,12 @@ public:
 	Triangle* triangle = NULL;
 	Color emission;
 
-	void init(Triangle* _triangle, int index, Color _emission)
+	void init(Triangle* _triangle, Color _emission, int index)
 	{
 		triangle = _triangle;
-		triangle->lightIndex = index; // Set the light index for the triangle
 		emission = _emission;
+
+		triangle->lightIndex = index;	// set the light index for the triangle
 	}
 	Vec3 sample(Sampler* sampler, Color& emittedColour, float& pdf) override
 	{
@@ -384,7 +384,7 @@ public:
 		u = u / (2.0f * M_PI);
 		float v = acosf(wi.y) / M_PI;
 
-		return env->sample(u, v) * boost;
+		return env->sample(TextCoord(u, v)) * boost;
 	}
 
 	float PDF(const Vec3& wi)

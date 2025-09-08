@@ -1,78 +1,28 @@
 #pragma once
 
-#include "Core.h"
 #include "Sampling.h"
-#include "Geometry.h"
 #include "Imaging.h"
 #include "Materials.h"
 #include "Lights.h"
 #include "Bvh.h"
+#include "Camera.h"
 
-class SceneCamera
+struct SurfaceData
 {
-public:
-	Matrix projMat;		// Projection matrix
-	Matrix viewMat;		// View matrix
+	Vec3 p;			// Intersection position
+	Vec3 n;			// Geometric normal
+	float t;		// Ray parameter at intersection
+	BSDF* bsdf;		// Material at the intersection
+	int lightIndex; // Index of the light if this is a light source
 
-	Matrix invProjMat;	// Inverse of projection matrix
-	Matrix invViewMat;	// Inverse of view matrix
+	ShadingData shadingData;
 
-	Vec2 size; // Size of the screen in pixels
-
-	Vec3 pos;	// Camera position in world space
-	Vec3 dir;	// Camera forward direction in world space
-
-	float Afilm;	// Area of the film
-
-	void init(Matrix ProjectionMatrix, Vec2i _size)
+	SurfaceData() = default;
+	SurfaceData(Vec3 _p, Vec3 _n)
 	{
-		projMat = ProjectionMatrix;
-		invProjMat = ProjectionMatrix.invert();
-		size = Vec2(_size.x, _size.y);
-
-		float Wlens = (2.0f / ProjectionMatrix.a[1][1]);
-		float aspect = ProjectionMatrix.a[0][0] / ProjectionMatrix.a[1][1];
-		float Hlens = Wlens * aspect;
-		Afilm = Wlens * Hlens;
-	}
-	void updateView(Matrix V)
-	{
-		viewMat = V;
-		invViewMat = V.invert();
-		pos = viewMat.mulPoint(Vec3(0, 0, 0));
-		dir = invProjMat.mulPointAndPerspectiveDivide(Vec3(0, 0, 1));
-		dir = viewMat.mulVec(dir);
-		dir = dir.normalize();
-	}
-
-	Ray generateRay(const Vec2& p)
-	{
-		Vec2 prime = p / size;
-		prime.y = 1.0f - prime.y;		// flip y coordinate
-		prime = (prime * 2.0f) - 1.0f;	// NDC space
-
-		Vec3 dir(prime.x, prime.y, 1.0f);	// point on near plane in view space
-
-		dir = invProjMat.mulPoint(dir);
-		dir = viewMat.mulVec(dir);
-
-		return Ray(pos, dir.normalize());
-	}
-
-	bool projectOntoCamera(const Vec3& p, Vec2& sp)
-	{
-		Vec3 pview = invViewMat.mulPoint(p);
-		Vec3 pproj = projMat.mulPointAndPerspectiveDivide(pview);
-
-		sp = (Vec2(pproj.x, pproj.y) + 1.0f) * 0.5f;
-
-		if (sp < 0 || sp > 1)
-			return false;
-
-		sp.y = 1.0f - sp.y;
-		sp *= size;
-
-		return true;
+		p = _p;
+		n = _n;
+		bsdf = NULL;
 	}
 };
 
@@ -90,9 +40,12 @@ public:
 	std::vector<Triangle> triangles;
 	std::vector<BSDF*> materials;
 	std::vector<Light*> lights;
+
 	Light* background = NULL;
-	BVHTree bvh;
+
 	SceneCamera camera;
+
+	BVHTree bvh;
 	AABB bounds;
 
 	~Scene()
@@ -112,8 +65,7 @@ public:
 			if (materials[triangles[i].materialIndex]->isLight())
 			{
 				AreaLight* light = new AreaLight();
-				light->init(&triangles[i], lights.size(),
-					materials[triangles[i].materialIndex]->emission);
+				light->init(&triangles[i], materials[triangles[i].materialIndex]->emission, lights.size());
 				lights.push_back(light);
 			}
 		}
@@ -209,7 +161,7 @@ public:
 			lights.push_back(background);
 		}
 	}
-	bool visible(const Vec3& p1, const Vec3& p2)
+	bool visible(const Vec3& p1, const Vec3& p2) const
 	{
 		Ray ray;
 		Vec3 dir = p2 - p1;
@@ -222,36 +174,38 @@ public:
 	{
 		return materials[light->materialIndex]->emit(shadingData, wi);
 	}
-	ShadingData calculateShadingData(IntersectionData intersection, Ray& ray)
+	SurfaceData calculateShadingData(IntersectionData intersection, Ray& ray)
 	{
-		ShadingData shadingData = {};
+		SurfaceData surfaceData;
+		ShadingData& shadingData = surfaceData.shadingData;
+
 		if (intersection.t < FLT_MAX)
 		{
-			shadingData.lightIndex = triangles[intersection.ID].lightIndex;
-			shadingData.x = ray.at(intersection.t);
-			shadingData.gNormal = triangles[intersection.ID].gNormal();
-			triangles[intersection.ID].interpolateAttributes(intersection.alpha, intersection.beta, intersection.gamma, shadingData.sNormal, shadingData.tu, shadingData.tv);
-			shadingData.bsdf = materials[triangles[intersection.ID].materialIndex];
+			surfaceData.lightIndex = triangles[intersection.ID].lightIndex;
+			surfaceData.p = ray.at(intersection.t);
+			surfaceData.n = triangles[intersection.ID].gNormal();
+			surfaceData.bsdf = materials[triangles[intersection.ID].materialIndex];
+
+			triangles[intersection.ID].interpolateAttributes(intersection.alpha, intersection.beta, intersection.gamma, shadingData.n, shadingData.uv);
+
 			shadingData.wo = -ray.dir;
-			if (shadingData.bsdf->isTwoSided())
+
+			if (surfaceData.bsdf->isTwoSided())
 			{
-				if (Dot(shadingData.wo, shadingData.sNormal) < 0)
-				{
-					shadingData.sNormal = -shadingData.sNormal;
-				}
-				if (Dot(shadingData.wo, shadingData.gNormal) < 0)
-				{
-					shadingData.gNormal = -shadingData.gNormal;
-				}
+				if (Dot(shadingData.wo, shadingData.n) < 0)
+					shadingData.n = -shadingData.n;
+				if (Dot(shadingData.wo, surfaceData.n) < 0)
+					surfaceData.n = -surfaceData.n;
 			}
-			shadingData.frame.fromVector(shadingData.sNormal);
-			shadingData.t = intersection.t;
+			shadingData.frame.fromVector(shadingData.n);
+			surfaceData.t = intersection.t;
 		}
 		else
 		{
 			shadingData.wo = -ray.dir;
-			shadingData.t = intersection.t;
+			surfaceData.t = intersection.t;
 		}
-		return shadingData;
+
+		return surfaceData;
 	}
 };
