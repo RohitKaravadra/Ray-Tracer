@@ -399,5 +399,5 @@ FodyWeavers.xsd
 
 /Output/
 
-/RTBase/scenes/*
-!/RTBase/scenes/cornell-box
+/Renderer/scenes/*
+!/Renderer/scenes/cornell-box
