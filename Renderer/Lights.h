@@ -1,6 +1,5 @@
 ﻿#pragma once
 
-#include "Core.h"
 #include "Geometry.h"
 #include "Materials.h"
 #include "Sampling.h"
@@ -51,11 +50,12 @@ public:
 	Triangle* triangle = NULL;
 	Color emission;
 
-	void init(Triangle* _triangle, int index, Color _emission)
+	void init(Triangle* _triangle, Color _emission, int index)
 	{
 		triangle = _triangle;
-		triangle->lightIndex = index; // Set the light index for the triangle
 		emission = _emission;
+
+		triangle->lightIndex = index;	// set the light index for the triangle
 	}
 	Vec3 sample(Sampler* sampler, Color& emittedColour, float& pdf) override
 	{
@@ -265,14 +265,14 @@ public:
 		// Combined PDF needs to account for the 2D domain size
 		float pdf = marginalPdf * conditionalPdf * (width * height);
 
-		return std::max(pdf, EPSILON);
+		return max(pdf, EPSILON);
 	}
 
 	float getPdf(float u, float v) const
 	{
 		// Clamp and scale to [0,1]
-		u = std::max(0.0f, std::min(1.0f - 1e-6f, u));
-		v = std::max(0.0f, std::min(1.0f - 1e-6f, v));
+		u = max(0.0f, min(1.0f - 1e-6f, u));
+		v = max(0.0f, min(1.0f - 1e-6f, v));
 
 		int row = static_cast<int>(v * height);
 		int col = static_cast<int>(u * width);
@@ -285,12 +285,12 @@ public:
 		// Sample row (marginal)
 		float rand1 = sampler->next();
 		int row = binarySearch(cdfRows, rand1);
-		row = std::max(0, std::min(row, static_cast<int>(height) - 1));
+		row = max(0, min(row, static_cast<int>(height) - 1));
 
 		// Sample column (conditional)
 		float rand2 = sampler->next();
 		int col = binarySearch(cdfCols[row], rand2);
-		col = std::max(0, std::min(col, static_cast<int>(width) - 1));
+		col = max(0, min(col, static_cast<int>(width) - 1));
 
 		// Compute PDF
 		pdf = getPdf(row, col);
@@ -326,8 +326,8 @@ public:
 
 	float getLum(float u, float v) const
 	{
-		u = std::max(0.0f, std::min(1.0f - 1e-6f, u));
-		v = std::max(0.0f, std::min(1.0f - 1e-6f, v));
+		u = max(0.0f, min(1.0f - 1e-6f, u));
+		v = max(0.0f, min(1.0f - 1e-6f, v));
 
 		int row = static_cast<int>(v * height);
 		int col = static_cast<int>(u * width);
@@ -384,7 +384,7 @@ public:
 		u = u / (2.0f * M_PI);
 		float v = acosf(wi.y) / M_PI;
 
-		return env->sample(u, v) * boost;
+		return env->sample(TextCoord(u, v)) * boost;
 	}
 
 	float PDF(const Vec3& wi)

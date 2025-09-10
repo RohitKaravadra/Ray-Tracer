@@ -20,6 +20,30 @@ enum IMAGE_FILTER
 	FT_MITCHELL_NETRAVALI
 };
 
+/// <summary>
+/// Texture coordinates structure representing 2D coordinates (u, v) 
+/// Typically used for mapping textures onto 3D models.
+/// always between 0 and 1
+/// </summary>
+class TextCoord
+{
+public:
+	union {
+		struct {
+			float u; // Horizontal coordinate
+			float v; // Vertical coordinate
+		};
+		float uv[2];
+	};
+
+	TextCoord() : u(0), v(0) {}
+	TextCoord(float _u, float _v)
+	{
+		u = std::fabsf(std::fmod(_u, 1.0f));
+		v = std::fabsf(std::fmod(_v, 1.0f));
+	}
+};
+
 class Texture
 {
 public:
@@ -76,11 +100,11 @@ public:
 		}
 		stbi_image_free(textureData);
 	}
-	Color sample(const float tu, const float tv) const
+	Color sample(const TextCoord& uv) const
 	{
 		Color tex;
-		float u = std::max(0.0f, fabsf(tu)) * width;
-		float v = std::max(0.0f, fabsf(tv)) * height;
+		float u = uv.u * width;
+		float v = uv.v * height;
 		int x = (int)floorf(u);
 		int y = (int)floorf(v);
 		float frac_u = u - x;
@@ -99,15 +123,15 @@ public:
 		tex = (s[0] * w0) + (s[1] * w1) + (s[2] * w2) + (s[3] * w3);
 		return tex;
 	}
-	float sampleAlpha(const float tu, const float tv) const
+	float sampleAlpha(const TextCoord& uv) const
 	{
 		if (alpha == NULL)
 		{
 			return 1.0f;
 		}
 		float tex;
-		float u = std::max(0.0f, fabsf(tu)) * width;
-		float v = std::max(0.0f, fabsf(tv)) * height;
+		float u = uv.u * width;
+		float v = uv.v * height;
 		int x = (int)floorf(u);
 		int y = (int)floorf(v);
 		float frac_u = u - x;
@@ -243,26 +267,26 @@ class Film
 	// Linear tonemap
 	void liner(float& r, float& g, float& b)
 	{
-		r = powf(std::max(r, 0.0f), inv2p2) * 255;
-		g = powf(std::max(g, 0.0f), inv2p2) * 255;
-		b = powf(std::max(b, 0.0f), inv2p2) * 255;
+		r = powf(max(r, 0.0f), inv2p2) * 255;
+		g = powf(max(g, 0.0f), inv2p2) * 255;
+		b = powf(max(b, 0.0f), inv2p2) * 255;
 	}
 
 	// Linear tonemap with exposure
 	void linerWithExposure(float& r, float& g, float& b, float exposure = 1.0f)
 	{
 		const float e = std::pow(2.0f, exposure * inv2p2);
-		r = powf(std::max(r, 0.0f), inv2p2) * e * 255;
-		g = powf(std::max(g, 0.0f), inv2p2) * e * 255;
-		b = powf(std::max(b, 0.0f), inv2p2) * e * 255;
+		r = powf(max(r, 0.0f), inv2p2) * e * 255;
+		g = powf(max(g, 0.0f), inv2p2) * e * 255;
+		b = powf(max(b, 0.0f), inv2p2) * e * 255;
 	}
 
 	// Reinhard global tonemap
 	void ReinhardGlobal(float& r, float& g, float& b)
 	{
-		r = powf(std::max(r / (1.0f + r), 0.0f), inv2p2) * 255;
-		g = powf(std::max(g / (1.0f + g), 0.0f), inv2p2) * 255;
-		b = powf(std::max(b / (1.0f + b), 0.0f), inv2p2) * 255;
+		r = powf(max(r / (1.0f + r), 0.0f), inv2p2) * 255;
+		g = powf(max(g / (1.0f + g), 0.0f), inv2p2) * 255;
+		b = powf(max(b / (1.0f + b), 0.0f), inv2p2) * 255;
 	}
 
 	float CX(float x) const
@@ -297,8 +321,7 @@ class Film
 
 public:
 	Color* film;
-	unsigned int width;
-	unsigned int height;
+	Vec2u size;
 	int SPP;
 	ImageFilter* filter;
 
@@ -315,20 +338,22 @@ public:
 		delete filter;
 	}
 
-	void splat(const float x, const float y, const Color& L)
+	void splat(const Vec2& p, const Color& L)
 	{
 		float filterWeights[25]; // Storage to cache weights
 		unsigned int indices[25]; // Store indices to minimize computations 
 		unsigned int used = 0;
 		float total = 0;
-		int size = filter->size();
-		for (int i = -size; i <= size; i++) {
-			for (int j = -size; j <= size; j++) {
-				int px = (int)x + j;
-				int py = (int)y + i;
-				if (px >= 0 && px < width && py >= 0 && py < height) {
-					indices[used] = (py * width) + px;
-					filterWeights[used] = filter->filter(px - x, py - y);
+		int _size = filter->size();
+		for (int i = -_size; i <= _size; i++)
+		{
+			for (int j = -_size; j <= _size; j++)
+			{
+				Vec2i sp = Vec2i(p.x + j, p.y + i);
+				if (sp >= 0 && sp < size)
+				{
+					indices[used] = (sp.y * size.x) + sp.x;
+					filterWeights[used] = filter->filter(sp.x - p.x, sp.y - p.y);
 					total += filterWeights[used];
 					used++;
 				}
@@ -355,48 +380,47 @@ public:
 		case TM_FILMIC:filmic(fr, fg, fb);
 		}
 
-		r = std::min(fr, 255.f);
-		g = std::min(fg, 255.f);
-		b = std::min(fb, 255.f);
+		r = min(fr, 255.f);
+		g = min(fg, 255.f);
+		b = min(fb, 255.f);
 	}
 
 	// Tonemap the pixel
 	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, int spp, TONEMAP toneMap = TM_LINEAR)
 	{
-		Color pixel = film[(y * width) + x] / (float)spp;
+		Color pixel = film[(y * size.x) + x] / (float)spp;
 
-		float fr = std::max(pixel.r, 0.0f);
-		float fg = std::max(pixel.g, 0.0f);
-		float fb = std::max(pixel.b, 0.0f);
+		float fr = max(pixel.r, 0.0f);
+		float fg = max(pixel.g, 0.0f);
+		float fb = max(pixel.b, 0.0f);
 
 		tonemap(fr, fg, fb, r, g, b, toneMap);
 	}
 
 	// Get the luminance of a pixels from the film with the given coordinates
-	std::vector<float> getLums(unsigned int startx, unsigned int starty, unsigned int endx, unsigned int endy)
+	std::vector<float> getLums(const Vec2i& start, const Vec2i& end)
 	{
 		std::vector<float> lums;
 
-		for (unsigned int x = startx; x < endx; x++)
-			for (unsigned int y = starty; y < endy; y++)
-				lums.emplace_back(film[y * width + x].Lum());
+		for (unsigned int x = start.x; x < end.x; x++)
+			for (unsigned int y = start.y; y < end.y; y++)
+				lums.emplace_back(film[y * size.x + x].Lum());
 
 		return lums;
 	}
 
 	// Do not change any code below this line
-	void init(int _width, int _height, IMAGE_FILTER _filter)
+	void init(Vec2u _size, IMAGE_FILTER _filter)
 	{
-		width = _width;
-		height = _height;
-		film = new Color[width * height];
+		size = _size;
+		film = new Color[size.x * size.y];
 		clear();
 		setFilter(_filter);
 	}
 
 	void clear()
 	{
-		memset(film, 0, width * height * sizeof(Color));
+		memset(film, 0, size.x * size.y * sizeof(Color));
 		SPP = 0;
 	}
 
@@ -407,12 +431,12 @@ public:
 
 	void save(std::string filename)
 	{
-		Color* hdrpixels = new Color[width * height];
-		for (unsigned int i = 0; i < (width * height); i++)
+		Color* hdrpixels = new Color[size.x * size.y];
+		for (unsigned int i = 0; i < (size.x * size.y); i++)
 		{
 			hdrpixels[i] = film[i] / (float)SPP;
 		}
-		stbi_write_hdr(filename.c_str(), width, height, 3, (float*)hdrpixels);
+		stbi_write_hdr(filename.c_str(), size.x, size.y, 3, (float*)hdrpixels);
 		delete[] hdrpixels;
 	}
 };

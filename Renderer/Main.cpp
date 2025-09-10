@@ -1,43 +1,41 @@
 
-
+#define NOMINMAX
 #include "GEMLoader.h"
 #include "Renderer.h"
 #include "SceneLoader.h"
-#define NOMINMAX
-#include "GamesEngineeringBase.h"
-#include <unordered_map>
 #include "SceneManager.h"
+#include "GamesEngineeringBase.h"
+#include "ArgsParcer.h"
 
-// create settings
+/// <summary>
+/// Creates and returns a SETTINGS object initialized with default values.
+/// </summary>
+/// <returns>A SETTINGS object with its fields set to default configuration values.</returns>
 static SETTINGS createSettings()
 {
 	SETTINGS settings;
 
-	settings.render = false;
 	settings.saveRenders = false;
+	settings.debug = false;
+	settings.denoise = false;
 
 	settings.drawMode = DM_ALBEDO;
 	settings.algorithm = AL_PATH_TRACE;
 	settings.toneMap = TM_REINHARD_GLOBAL;
 	settings.filter = FT_BOX;
 
-	settings.debug = false;
-	settings.denoise = true;
-
 	settings.useMultithreading = true;
-	settings.useMis = true;
-
-	settings.adaptiveSampling = true;
-	settings.initSPP = 50;
-	settings.totalSPP = 600;
-
 	settings.numThreads = 8;
-	settings.maxBounces = 6;
-	settings.vplRaysPerTile = 1;
+
+	settings.totalSPP = 100;
+	settings.maxBounces = 5;
 
 	return settings;
 }
 
+/// <summary>
+/// Stats class to keep track of rendering statistics and performance metrics.
+/// </summary>
 class Stats
 {
 	float totalTime;
@@ -62,9 +60,7 @@ public:
 	void reset()
 	{
 		renderStartTime = totalTime; // reset render start time
-		if (completed)
-		{
-			std::cout << "\n\n\n\n\n";
+		if (completed) {
 			completed = false;	// reset completed flag
 		}
 	}
@@ -85,33 +81,33 @@ public:
 		{
 			completed = true;
 			renderTime = totalTime - renderStartTime;
+			std::cout << "Render completed in " << std::roundf(renderTime) << " seconds.\n";
 		}
 	}
 
 	bool canInput() const { return totalTime - lastInputTime > 0.1f; }
 
-	bool isCompleted() const { return completed; }
-
-	void print(Renderer& rt) const
+	void print(float progress, int spp, std::string alg, bool rendering) const
 	{
-		float finalTime = completed ? renderTime : totalTime - renderStartTime;
-		float progress = rt.settings.render ? rt.getSPP() * 100 / rt.settings.totalSPP : 0;
-
 		// Write stats to console
-		std::cout << "\033[F\033[F\033[F\033[F\033[F";
-		std::cout << "Progress   : " << progress << "%                                                \n";
-		std::cout << "Samples    : " << rt.getSPP() << "                                              \n";
-		std::cout << "Time       : " << deltaTime << "                                                \n";
-		std::cout << "FPS        : " << (deltaTime > 0 ? 1.0f / deltaTime : FLT_MAX) << "             \n";
-		std::cout << "Total time : " << std::roundf(totalTime) << " sec                               \n";
+		tui::restoreCursor();
+		tui::clearRest();
+		if (rendering)
+			tui::print(tui::color::cyan(tui::format("Algorithm  : ", alg,
+				" (Progress   : ", std::to_string((int)(progress * 100)), " % |",
+				" Samples   : ", std::to_string(spp), " )")));
+		else
+			tui::print(tui::color::cyan(tui::format("Algorithm  : ", alg, " (change - TAB , render - R) ")));
 	}
 };
 
+/// <summary>
+/// Saves the current render from the given renderer to a PNG file in the 'Renders' directory.
+/// </summary>
+/// <param name="rt">Reference to the Renderer object whose output will be saved.</param>
+/// <param name="filename">The name of the PNG file to save the render as.</param>
 static void saveRender(Renderer& rt, const std::string& filename)
 {
-	if (!rt.settings.saveRenders)
-		return;
-
 	const wchar_t* rendersFolder = L"Renders";
 	CreateDirectory(L"Renders", NULL);
 
@@ -120,19 +116,34 @@ static void saveRender(Renderer& rt, const std::string& filename)
 	rt.savePNG(filepath);
 }
 
-int main()
+
+/// <summary>
+/// Entry point for the ray-tracing application. Initializes the scene, window, renderer, and main loop for user interaction and rendering.
+/// </summary>
+/// <param name="argc">The number of command-line arguments.</param>
+/// <param name="argv">An array of command-line argument strings.</param>
+/// <returns>Returns 0 upon successful execution.</returns>
+int main(int argc, char* argv[])
 {
+	tui::clear();
+	tui::hideCursor();
+
+	SETTINGS settings = createSettings();
+	std::string scenePath = ArgsParser::parse(argc, argv, settings);
+	std::cout << settings;
+
+	// Load scene
 	SceneManager sceneManager;
-	sceneManager.load(SCENES::CORNELL_BOX, "scenes");
+	if (scenePath.empty()) sceneManager.load(SCENES::CORNELL_BOX, "scenes");
+	else sceneManager.load(scenePath);
 
 	// Create canvas
 	GamesEngineeringBase::Window canvas;
-	canvas.create((unsigned int)sceneManager.curScene->camera.width, (unsigned int)sceneManager.curScene->camera.height, "Tracer", 1.0f);
+	Vec2u screenSize = sceneManager.curScene->camera.size;
+	canvas.create(screenSize.x, screenSize.y, "Ray-Tracer", 1.0f);
 
 	// Create ray tracer
-	Renderer rt;
-	rt.init(sceneManager.curScene, &canvas, createSettings());
-
+	Renderer rt(sceneManager.curScene, &canvas, settings);
 
 	// Create timer
 	GamesEngineeringBase::Timer timer;
@@ -141,7 +152,8 @@ int main()
 	bool running = true;
 	AOV aov;
 
-	std::cout << "\n\n\n\n\n";
+	tui::saveCursor();
+	stats.print(0, 0, "", false);
 	while (running)
 	{
 		stats.update(timer.dt());
@@ -156,7 +168,7 @@ int main()
 		}
 
 		// Update camera and check if it has changed (reset if it has)
-		if (!rt.settings.render && sceneManager.viewcamera->update(canvas))
+		if (!rt.isRendering() && sceneManager.viewcamera->update(canvas))
 		{
 			rt.clear();
 			stats.reset();
@@ -184,47 +196,28 @@ int main()
 
 		canvas.clear();
 
-		if (!stats.isCompleted())
+		if (!rt.isCompleted())
 		{
-			if (rt.settings.useMultithreading)
-				rt.renderMT();
-			else
-				rt.render();
+			rt.render();
 
-			stats.print(rt);
+			float progress = 0;
+			int spp = 0;
+			rt.getProgress(progress, spp);
+			stats.print(progress, spp,
+				rt.getAlgorithm(), rt.isRendering());
 
-			if (rt.settings.totalSPP <= rt.getSPP() && rt.settings.render)
+			if (rt.isCompleted())
 			{
 				stats.onCompletion();
-
-				rt.draw();
-				saveRender(rt, sceneManager.currentSceneName + "_render.png");
-
-				// denoising
-				if (rt.settings.denoise)
-				{
-					rt.createAOV(aov);
-					Denoiser denoiser(aov.width, aov.height);
-					denoiser.denoise(aov);
-				}
-
-				rt.draw(aov);
-				saveRender(rt, sceneManager.currentSceneName + "_render_denoised.png");
+				rt.denoise();
 			}
-			else
-				rt.draw();
-		}
-		else
-		{
-			// draw the image
-			if (rt.settings.denoise)
-				rt.draw(aov);
-			else
-				rt.draw();
 		}
 
+		rt.draw();
 		canvas.present();
 	}
 
+	tui::showCursor();
+	tui::clear();
 	return 0;
 }

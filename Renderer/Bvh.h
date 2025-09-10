@@ -1,7 +1,7 @@
 #pragma once
 
+#include "TerminalUI.h"
 #include "Geometry.h"
-#include <iostream>
 #include <atomic>
 #include <thread>
 #include <vector>
@@ -286,7 +286,7 @@ class BVHTree
 			depth++;
 			unsigned int depth1 = splitSingleThreaded(nodes[node].child_l, depth);
 			unsigned int depth2 = splitSingleThreaded(nodes[node].child_r, depth);
-			return std::max(depth1, depth2);
+			return max(depth1, depth2);
 		}
 
 		return depth;
@@ -304,8 +304,8 @@ public:
 		triangles = &inputTriangles[0];
 		unsigned int numTriangles = inputTriangles.size();
 
-		std::cout << "Total Triangles in scene     : " << numTriangles << std::endl;
-		std::cout << "Building BVH.................." << std::endl;
+		tui::print(tui::format("Total Triangles in scene     : ", numTriangles));
+		tui::print("Building BVH..................");
 
 		// Clear data if any
 		nodes.clear();
@@ -338,7 +338,7 @@ public:
 		else
 			splitSingleThreaded(0);
 
-		buildTime = ((float)clock() / CLOCKS_PER_SEC) - buildTime;
+		buildTime = min(0.f, ((float)clock() / CLOCKS_PER_SEC) - buildTime);
 
 		// Trim nodes to actual size
 		unsigned int actualNodeCount = nextNodeIndex.load();
@@ -364,14 +364,14 @@ public:
 		}
 
 		// Print statistics
-		std::cout << "\n  -----------: BVH Info :-----------  \n";
-		std::cout << "Total nodes                  : " << nodes.size() << std::endl;
-		std::cout << "Leaf nodes                   : " << leafNodes << std::endl;
-		std::cout << "Total Triangles              : " << trices << std::endl;
-		std::cout << "Average triangles per node   : " << float(trices) / leafNodes << std::endl;
-		std::cout << "Maximum triangles in a node  : " << maxTrice << std::endl;
-		std::cout << "BVH build time               : " << buildTime << " seconds\n";
-		std::cout << "Build method                 : " << (useParallel ? "Parallel" : "Single-threaded") << "\n\n";
+		tui::print(tui::color::yellow("\n  -----------: BVH Info :-----------  \n"));
+		tui::print(tui::color::yellow(tui::format("Total nodes                  : ", nodes.size())));
+		tui::print(tui::color::yellow(tui::format("Leaf nodes                   : ", leafNodes)));
+		tui::print(tui::color::yellow(tui::format("Total Triangles              : ", trices)));
+		tui::print(tui::color::yellow(tui::format("Average triangles per node   : ", float(trices) / leafNodes)));
+		tui::print(tui::color::yellow(tui::format("Maximum triangles in a node  : ", maxTrice)));
+		tui::print(tui::color::yellow(tui::format("BVH build time               : ", buildTime, " seconds")));
+		tui::print(tui::color::yellow(tui::format("Build method                 : ", useParallel ? "Parallel\n" : "Single-threaded\n")));
 	}
 
 	void traverse(const Ray& ray, IntersectionData& intersection) const

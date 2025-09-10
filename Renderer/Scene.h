@@ -1,78 +1,28 @@
 #pragma once
 
-#include "Core.h"
 #include "Sampling.h"
-#include "Geometry.h"
 #include "Imaging.h"
 #include "Materials.h"
 #include "Lights.h"
 #include "Bvh.h"
+#include "Camera.h"
 
-class Camera
+struct SurfaceData
 {
-public:
-	Matrix projectionMatrix;
-	Matrix inverseProjectionMatrix;
-	Matrix camera;
-	Matrix cameraToView;
-	float width = 0;
-	float height = 0;
-	Vec3 origin;
-	Vec3 viewDirection;
-	float Afilm;
-	void init(Matrix ProjectionMatrix, int screenwidth, int screenheight)
-	{
-		projectionMatrix = ProjectionMatrix;
-		inverseProjectionMatrix = ProjectionMatrix.invert();
-		width = (float)screenwidth;
-		height = (float)screenheight;
-		float Wlens = (2.0f / ProjectionMatrix.a[1][1]);
-		float aspect = ProjectionMatrix.a[0][0] / ProjectionMatrix.a[1][1];
-		float Hlens = Wlens * aspect;
-		Afilm = Wlens * Hlens;
-	}
-	void updateView(Matrix V)
-	{
-		camera = V;
-		cameraToView = V.invert();
-		origin = camera.mulPoint(Vec3(0, 0, 0));
-		viewDirection = inverseProjectionMatrix.mulPointAndPerspectiveDivide(Vec3(0, 0, 1));
-		viewDirection = camera.mulVec(viewDirection);
-		viewDirection = viewDirection.normalize();
-	}
+	Vec3 p;			// Intersection position
+	Vec3 n;			// Geometric normal
+	float t;		// Ray parameter at intersection
+	BSDF* bsdf;		// Material at the intersection
+	int lightIndex; // Index of the light if this is a light source
 
-	/// <summary>
-	/// Geberates a ray from camera origin
-	/// </summary>
-	/// <param name="x"> x coordinate of screen pixel </param>
-	/// <param name="y"> y coordinate of screen pixel</param>
-	/// <returns> A ray from camera origin with direction to the point on near plane </returns>
-	Ray generateRay(float x, float y)
-	{
-		float xprime = x / width;
-		float yprime = 1.0f - (y / height);
-		xprime = (xprime * 2.0f) - 1.0f;
-		yprime = (yprime * 2.0f) - 1.0f;
-		Vec3 dir(xprime, yprime, 1.0f);
-		dir = inverseProjectionMatrix.mulPoint(dir);
-		dir = camera.mulVec(dir);
-		return Ray(origin, dir.normalize());
-	}
+	ShadingData shadingData;
 
-	bool projectOntoCamera(const Vec3& p, float& x, float& y)
+	SurfaceData() = default;
+	SurfaceData(Vec3 _p, Vec3 _n)
 	{
-		Vec3 pview = cameraToView.mulPoint(p);
-		Vec3 pproj = projectionMatrix.mulPointAndPerspectiveDivide(pview);
-		x = (pproj.x + 1.0f) * 0.5f;
-		y = (pproj.y + 1.0f) * 0.5f;
-		if (x < 0 || x > 1.0f || y < 0 || y > 1.0f)
-		{
-			return false;
-		}
-		x = x * width;
-		y = 1.0f - y;
-		y = y * height;
-		return true;
+		p = _p;
+		n = _n;
+		bsdf = NULL;
 	}
 };
 
@@ -82,7 +32,7 @@ class Scene
 	Light* sampleLight(Sampler* sampler, float& pmf) const
 	{
 		pmf = 1 / (float)lights.size();		// probability mass function
-		unsigned int i = std::min(sampler->next() * lights.size(), lights.size() - 1.0f);
+		unsigned int i = min(sampler->next() * lights.size(), lights.size() - 1.0f);
 		return lights[i];
 	}
 
@@ -90,9 +40,12 @@ public:
 	std::vector<Triangle> triangles;
 	std::vector<BSDF*> materials;
 	std::vector<Light*> lights;
+
 	Light* background = NULL;
+
+	SceneCamera camera;
+
 	BVHTree bvh;
-	Camera camera;
 	AABB bounds;
 
 	~Scene()
@@ -112,8 +65,7 @@ public:
 			if (materials[triangles[i].materialIndex]->isLight())
 			{
 				AreaLight* light = new AreaLight();
-				light->init(&triangles[i], lights.size(),
-					materials[triangles[i].materialIndex]->emission);
+				light->init(&triangles[i], materials[triangles[i].materialIndex]->emission, lights.size());
 				lights.push_back(light);
 			}
 		}
@@ -209,7 +161,7 @@ public:
 			lights.push_back(background);
 		}
 	}
-	bool visible(const Vec3& p1, const Vec3& p2)
+	bool visible(const Vec3& p1, const Vec3& p2) const
 	{
 		Ray ray;
 		Vec3 dir = p2 - p1;
@@ -222,36 +174,38 @@ public:
 	{
 		return materials[light->materialIndex]->emit(shadingData, wi);
 	}
-	ShadingData calculateShadingData(IntersectionData intersection, Ray& ray)
+	SurfaceData calculateShadingData(IntersectionData intersection, Ray& ray)
 	{
-		ShadingData shadingData = {};
+		SurfaceData surfaceData;
+		ShadingData& shadingData = surfaceData.shadingData;
+
 		if (intersection.t < FLT_MAX)
 		{
-			shadingData.lightIndex = triangles[intersection.ID].lightIndex;
-			shadingData.x = ray.at(intersection.t);
-			shadingData.gNormal = triangles[intersection.ID].gNormal();
-			triangles[intersection.ID].interpolateAttributes(intersection.alpha, intersection.beta, intersection.gamma, shadingData.sNormal, shadingData.tu, shadingData.tv);
-			shadingData.bsdf = materials[triangles[intersection.ID].materialIndex];
+			surfaceData.lightIndex = triangles[intersection.ID].lightIndex;
+			surfaceData.p = ray.at(intersection.t);
+			surfaceData.n = triangles[intersection.ID].gNormal();
+			surfaceData.bsdf = materials[triangles[intersection.ID].materialIndex];
+
+			triangles[intersection.ID].interpolateAttributes(intersection.alpha, intersection.beta, intersection.gamma, shadingData.n, shadingData.uv);
+
 			shadingData.wo = -ray.dir;
-			if (shadingData.bsdf->isTwoSided())
+
+			if (surfaceData.bsdf->isTwoSided())
 			{
-				if (Dot(shadingData.wo, shadingData.sNormal) < 0)
-				{
-					shadingData.sNormal = -shadingData.sNormal;
-				}
-				if (Dot(shadingData.wo, shadingData.gNormal) < 0)
-				{
-					shadingData.gNormal = -shadingData.gNormal;
-				}
+				if (Dot(shadingData.wo, shadingData.n) < 0)
+					shadingData.n = -shadingData.n;
+				if (Dot(shadingData.wo, surfaceData.n) < 0)
+					surfaceData.n = -surfaceData.n;
 			}
-			shadingData.frame.fromVector(shadingData.sNormal);
-			shadingData.t = intersection.t;
+			shadingData.frame.fromVector(shadingData.n);
+			surfaceData.t = intersection.t;
 		}
 		else
 		{
 			shadingData.wo = -ray.dir;
-			shadingData.t = intersection.t;
+			surfaceData.t = intersection.t;
 		}
-		return shadingData;
+
+		return surfaceData;
 	}
 };
