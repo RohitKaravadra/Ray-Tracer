@@ -213,7 +213,7 @@ public:
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
 		// Replace this with Mirror PDF
-		return 0.0f;
+		return 1.0f;
 	}
 
 	bool isPureSpecular()
@@ -415,31 +415,16 @@ public:
 		return shadingData.frame.toWorld(wi);
 	}
 
-	Color evaluate(const ShadingData& shadingData, const Vec3& wi)
-	{
-		// Replace this with Glass evaluation code
-		return Color(0.0f, 0.0f, 0.0f);
-	}
+	Color evaluate(const ShadingData& shadingData, const Vec3& wi) { return Color(0.0f); }
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi)
 	{
-		return 0.0f;
+		return 1.0f;
 	}
 
-	bool isPureSpecular()
-	{
-		return true;
-	}
-
-	bool isTwoSided()
-	{
-		return true;
-	}
-
-	float mask(const ShadingData& shadingData)
-	{
-		return albedo->sampleAlpha(shadingData.uv);
-	}
+	bool isPureSpecular() { return true; }
+	bool isTwoSided() { return true; }
+	float mask(const ShadingData& shadingData) { return albedo->sampleAlpha(shadingData.uv); }
 };
 
 class DielectricBSDF : public BSDF

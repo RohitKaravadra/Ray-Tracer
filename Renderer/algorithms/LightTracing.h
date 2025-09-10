@@ -82,11 +82,13 @@ class LightTracing : public AlgorithmBase
 				connectToCamera(surfaceData.p, shadingData.n, col);
 			}
 
-			// Russian Roulette for termination
-			float russianRouletteProbability = min(path.pathThroughput.Lum(), 0.9f);
-			if (russianRouletteProbability < path.sampler->next())
-				return;
-			path.pathThroughput = path.pathThroughput / russianRouletteProbability;
+			// Russian roulette termination
+			if (depth > 2)
+			{
+				float rrProbability = min(path.pathThroughput.Lum(), 0.95f);
+				if (path.sampler->next() >= rrProbability) return;
+				path.pathThroughput = path.pathThroughput / rrProbability;
+			}
 
 			// Sample new direction
 			Color bsdf;

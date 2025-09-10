@@ -3,7 +3,7 @@
 #include "Imaging.h"
 #include "TerminalUI.h"
 
-constexpr int ALGORITHM_COUNT = 4;
+constexpr int ALGORITHM_COUNT = 3;
 enum ALGORITHM
 {
 	AL_PATH_TRACE,

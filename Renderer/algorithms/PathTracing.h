@@ -120,9 +120,12 @@ class PathTracing : public AlgorithmBase
 				return direct;
 
 			// Russian roulette termination
-			float rrProbability = min(max(path.pathThroughput.Lum(), 0.05f), 0.95f);
-			if (path.sampler->next() >= rrProbability) return direct;
-			path.pathThroughput = path.pathThroughput / rrProbability;
+			if (depth > 2)
+			{
+				float rrProbability = min(path.pathThroughput.Lum(), 0.95f);
+				if (path.sampler->next() >= rrProbability) return direct;
+				path.pathThroughput = path.pathThroughput / rrProbability;
+			}
 
 			// Sample BSDF for next path segment
 			Color bsdf;
@@ -274,7 +277,7 @@ public:
 	PathTracing(RENDERER_DATA& data) : AlgorithmBase(data)
 	{
 		tileSamples.resize(data.totalTiles, 1);
-		initSpp = max((int)(data.settings.totalSPP * initSppAmnt), 1);
+		initSpp = (int)max(data.settings.totalSPP * initSppAmnt, 1.f);
 	}
 
 	int getSpp(int index) override

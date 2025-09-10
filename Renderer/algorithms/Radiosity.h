@@ -36,9 +36,12 @@ class Radiosity : public AlgorithmBase
 		Color Le;
 	};
 
-	const int totalRays = 20.0f;	// total rays per frame
-	int raysPerThread;				// rays per thread
-	std::vector<VPL> vpls;			// list of VPLs
+	const float minDistSqPerc = 0.01f;	// percentage of scene size for min distance squared
+	const int totalRays = 20.0f;		// total rays per frame
+
+	float minDistSq;					// minimum distance squared for VPL contribution
+	int raysPerThread;					// rays per thread
+	std::vector<VPL> vpls;				// list of VPLs
 
 	// ##################################################################################
 	// RADIOSITY METHODS
@@ -49,6 +52,14 @@ class Radiosity : public AlgorithmBase
 		// Max recursion depth check
 		if (depth >= data.settings.maxBounces)
 			return;
+
+		// Russian roulette termination
+		if (depth > 2)
+		{
+			float rrProbability = min(path.pathThroughput.Lum(), 0.95f);
+			if (path.sampler->next() >= rrProbability) return;
+			path.pathThroughput = path.pathThroughput / rrProbability;
+		}
 
 		// Traverse the scene to find an intersection
 		IntersectionData intersection = data.scene->traverse(path.r);
@@ -69,20 +80,15 @@ class Radiosity : public AlgorithmBase
 			// Update path throughput
 			path.pathThroughput = path.pathThroughput * bsdf * fabsf(wi.dot(shadingData.n)) / pdf;
 
+			// If the path throughput is too low, stop
+			if (path.pathThroughput.Lum() < EPSILON) return;
+
+			// Create a new VPL at the intersection point and add to the list
 			VPL vpl;
 			vpl.p = surfaceData.p;
 			vpl.shadingData = shadingData;
 			vpl.Le = path.pathThroughput * path.Le;
-
-			// update vpls list
 			vplList.emplace_back(vpl);
-
-			// Russian Roulette for termination
-			float russianRouletteProbability = min(path.pathThroughput.Lum(), 0.9f);
-			if (russianRouletteProbability < path.sampler->next())
-				return;
-
-			path.pathThroughput = path.pathThroughput / russianRouletteProbability;
 
 			// Create new ray
 			path.r.init(surfaceData.p + (wi * EPSILON), wi);
@@ -159,7 +165,7 @@ class Radiosity : public AlgorithmBase
 			wi = wi.normalize();
 
 			float gTerm = (max(Dot(wi, shadingData.n), 0.0f) *
-				max(-Dot(wi, vpl.shadingData.n), 0.0f)) / lengthSq;
+				max(-Dot(wi, vpl.shadingData.n), 0.0f)) / max(lengthSq, minDistSq);
 
 			// Shade if visible
 			if (gTerm > 0 && data.scene->visible(surfaceData.p, vpl.p))
@@ -289,6 +295,7 @@ class Radiosity : public AlgorithmBase
 public:
 	Radiosity(RENDERER_DATA& _data) : AlgorithmBase(_data)
 	{
+		minDistSq = use<SceneBounds>().sceneRadius * minDistSqPerc;
 		raysPerThread = max((float)totalRays / (float)data.numThreads, 1);
 	}
 };

@@ -102,7 +102,7 @@ class Renderer
 	// DEBUG DRAW MODES
 	// ##################################################################################
 
-	Color albedo(Ray& r)
+	Color albedo(Ray& r) const
 	{
 		IntersectionData intersection = data.scene->traverse(r);
 		SurfaceData surfaceData = data.scene->calculateShadingData(intersection, r);
@@ -118,7 +118,7 @@ class Renderer
 		return data.scene->background->evaluate(r.dir);
 	}
 
-	Color viewNormals(Ray& r)
+	Color viewNormals(Ray& r) const
 	{
 		IntersectionData intersection = data.scene->traverse(r);
 		if (intersection.t < FLT_MAX)
@@ -396,12 +396,16 @@ public:
 		if (data.isDenoised || !data.settings.denoise)
 			return;
 
+#if defined(_M_X64) || defined(__x86_64__)
 		// create AOVs
 		createAOV(data.aov);
 		// denoise
 		Denoiser denoiser(data.aov.size.x, data.aov.size.y);
 		denoiser.denoise(data.aov);
 		data.isDenoised = true;
+#else
+#pragma message("OIDN not supported in x86 build")
+#endif;
 	}
 
 	// ##################################################################################

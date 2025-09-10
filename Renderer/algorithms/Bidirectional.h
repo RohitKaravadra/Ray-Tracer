@@ -28,46 +28,66 @@ class Bidirectional : public AlgorithmBase
 		VertexData() : p(0), bsdf(nullptr), throughput(1) {}
 	};
 
-	void generatePath(Ray& r, Sampler* sampler, Color& throughput, std::vector<VertexData>& path, int depth = 0, bool reverse = false)
+	float powerHeuristic(float pdfA, float pdfB)
 	{
-		if (data.settings.maxBounces < depth)
+		if (pdfA == 0 && pdfB == 0) return 0.0f;
+		pdfA *= pdfA;
+		pdfB *= pdfB;
+		return pdfA / (pdfA + pdfB);
+	}
+
+	void generatePath(Ray& r, Sampler* sampler, Color throughput,
+		std::vector<VertexData>& path, int depth = 0)
+	{
+		if (depth > data.settings.maxBounces)
 			return;
 
 		IntersectionData intersection = data.scene->traverse(r);
 		if (intersection.t < FLT_MAX)
 		{
-			// Russian roulette termination
-			float rrProbability = min(max(throughput.Lum(), 0.05f), 0.95f);
-			if (sampler->next() >= rrProbability) return;
-			throughput /= rrProbability;
-
 			SurfaceData surfaceData = data.scene->calculateShadingData(intersection, r);
 			ShadingData& shadingData = surfaceData.shadingData;
-
-			// Sample BSDF for next path segment
-			Color bsdf;
-			float bsdfPdf;
-			Vec3 wi = surfaceData.bsdf->sample(shadingData, sampler, bsdf, bsdfPdf);
-
-			// update throughput
-			throughput *= bsdf * fabsf(Dot(wi, shadingData.n)) / bsdfPdf;
-
-			// terminate if throughput is too low
-			if (throughput.Lum() < EPSILON) return;
 
 			// create vertex
 			VertexData vertex;
 			vertex.p = surfaceData.p;
 			vertex.shadingData = shadingData;
-			vertex.throughput = throughput;
 			vertex.bsdf = surfaceData.bsdf;
 
-			path.emplace_back(vertex);
+			// terminate if hit light source
 			if (surfaceData.bsdf->isLight())
+			{
+				throughput *= surfaceData.bsdf->emit(shadingData, -r.dir);
+				vertex.throughput = throughput;
+				path.emplace_back(vertex);
 				return;
+			}
+			else
+			{
+				// Sample BSDF for next path segment
+				Color bsdf;
+				float bsdfPdf;
+				Vec3 wi = surfaceData.bsdf->sample(shadingData, sampler, bsdf, bsdfPdf);
+				throughput *= bsdf * fabsf(Dot(wi, shadingData.n)) / bsdfPdf;
 
-			r.init(surfaceData.p + (wi * EPSILON), wi);
-			generatePath(r, sampler, throughput, path, depth + 1);
+				// terminate if throughput is too low
+				if (throughput.Lum() < EPSILON) return;
+
+				// Russian roulette termination
+				if (depth > 2)
+				{
+					float rrProbability = min(max(throughput.Lum(), 0.05f), 0.95f);
+					if (sampler->next() >= rrProbability) return;
+					throughput /= rrProbability;
+				}
+
+				vertex.throughput = throughput;
+				path.emplace_back(vertex);
+
+				// spawn new ray and continue path
+				r.init(surfaceData.p + (wi * EPSILON), wi);
+				generatePath(r, sampler, throughput, path, depth + 1);
+			}
 		}
 	}
 
@@ -75,97 +95,58 @@ class Bidirectional : public AlgorithmBase
 	{
 		// sampel light source
 		LightSample light = data.scene->sampleLight(sampler);
-		if (light.isNull) return false;
+		if (light.isNull) return true;
 
 		// sample direction and create ray
 		float dirPdf;
 		Vec3 dir = light.light->sampleDirectionFromLight(sampler, dirPdf);
 		Ray lightRay(light.p + light.n * EPSILON, dir);
 
-		Color throughput = light.emitted * fabsf(Dot(light.n, dir)) / (light.pmf * light.pdf * dirPdf);
+		float pdf = light.pmf * light.pdf * dirPdf;
+		Color throughput = light.emitted * fabsf(Dot(light.n, dir)) / pdf;
 
 		VertexData vertex;
 		vertex.p = light.p;
-		vertex.shadingData.n = light.n;
-		vertex.throughput = throughput;
+		vertex.shadingData = ShadingData(light.n);
+		vertex.throughput = light.emitted / pdf;
 		path.emplace_back(vertex);
 
 		generatePath(lightRay, sampler, throughput, path);
 
-		return true;
+		return false;
 	}
 
-	bool generateCameraPath(Ray& r, Sampler* sampler, std::vector<VertexData>& path, Color& emitted)
+	bool generateCameraPath(Ray& r, Sampler* sampler, std::vector<VertexData>& path)
 	{
 		Color throughput(1.0f);
-
-		VertexData vertex;
-		vertex.p = r.o;
-		vertex.shadingData.n = r.dir; // Camera normal aligned with ray direction
-		vertex.throughput = throughput;
-		path.emplace_back(vertex);
-
-		IntersectionData intersection = data.scene->traverse(r);
-
-		if (intersection.t < FLT_MAX)
-		{
-			SurfaceData surfaceData = data.scene->calculateShadingData(intersection, r);
-			ShadingData& shadingData = surfaceData.shadingData;
-
-			// Sample BSDF for next path segment
-			Color bsdf;
-			float bsdfPdf;
-			Vec3 wi = surfaceData.bsdf->sample(shadingData, sampler, bsdf, bsdfPdf);
-
-			// update throughput
-			throughput *= bsdf * fabsf(Dot(wi, shadingData.n)) / bsdfPdf;
-
-			// create vertex
-			VertexData vertex;
-			vertex.p = surfaceData.p;
-			vertex.shadingData = shadingData;
-			vertex.throughput = throughput;
-			vertex.bsdf = surfaceData.bsdf;
-
-			path.emplace_back(vertex);
-			if (surfaceData.bsdf->isLight())
-			{
-				emitted = surfaceData.bsdf->emission;
-				return true;
-			}
-
-			r.init(surfaceData.p + (wi * EPSILON), wi);
-			generatePath(r, sampler, throughput, path, 1);
-		}
-
-		return false;
+		generatePath(r, sampler, throughput, path, 0);
+		return path.empty();
 	}
 
 	Color computePath(Ray& ray, Sampler* sampler)
 	{
+		// generate camera path
 		std::vector<VertexData> cameraPath;
-		Color emitted(1.0f);
-		if (generateCameraPath(ray, sampler, cameraPath, emitted))
-			return emitted;
-		if (cameraPath.empty()) return Color(0.0f);
+		if (generateCameraPath(ray, sampler, cameraPath)) return Color(0.0f);
 
+		// generate light path
 		std::vector<VertexData> lightPath;
-		if (!generateLightPath(sampler, lightPath))
-			return Color(0.0f);
+		if (generateLightPath(sampler, lightPath)) return Color(0.0f);
 
 		Color result(0);
 
 		// Try all (s, t) connections
 		for (int s = 0; s < (int)cameraPath.size(); s++)
 		{
+			const auto& cv = cameraPath[s];
+			if (cv.bsdf->isPureSpecular())
+				continue;
+
 			for (int t = 0; t < (int)lightPath.size(); t++)
 			{
-				const auto& cv = cameraPath[s];
 				const auto& lv = lightPath[t];
-
-				// skip if specular → you can’t directly connect through delta BSDFs
-				if ((cv.bsdf && cv.bsdf->isPureSpecular()) ||
-					lv.bsdf && lv.bsdf->isPureSpecular())
+				// skip if specular
+				if (lv.bsdf && lv.bsdf->isPureSpecular())
 					continue;
 
 				// shadow ray test
@@ -180,13 +161,12 @@ class Bidirectional : public AlgorithmBase
 				float cosL = max(0.f, Dot(lv.shadingData.n, -d));
 				float G = (cosC * cosL) / dist2;
 
-				Color camContrib = cv.bsdf ? cv.bsdf->evaluate(cv.shadingData, d) : 1;
+				Color camContrib = cv.bsdf->evaluate(cv.shadingData, d);
 				Color lightContrib = lv.bsdf ? lv.bsdf->evaluate(lv.shadingData, -d) : 1;
 
 				// combine throughputs
 				Color contrib = cv.throughput * camContrib * G * lightContrib * lv.throughput;
 
-				// TODO: apply MIS weight (for now weight = 1)
 				result += contrib;
 			}
 		}

@@ -178,6 +178,7 @@
   <ItemGroup>
     <ClInclude Include="algorithms\Algorithm.h" />
     <ClInclude Include="algorithms\Bidirectional.h" />
+    <ClInclude Include="ArgsParcer.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="math\mathdefines.h" />
     <ClInclude Include="algorithms\Radiosity.h" />

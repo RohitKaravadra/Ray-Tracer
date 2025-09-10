@@ -3,9 +3,9 @@
 #include "GEMLoader.h"
 #include "Renderer.h"
 #include "SceneLoader.h"
-#include <unordered_map>
 #include "SceneManager.h"
 #include "GamesEngineeringBase.h"
+#include "ArgsParcer.h"
 
 /// <summary>
 /// Creates and returns a SETTINGS object initialized with default values.
@@ -20,7 +20,7 @@ static SETTINGS createSettings()
 	settings.denoise = false;
 
 	settings.drawMode = DM_ALBEDO;
-	settings.algorithm = AL_BIDIRECTIONAL;
+	settings.algorithm = AL_PATH_TRACE;
 	settings.toneMap = TM_REINHARD_GLOBAL;
 	settings.filter = FT_BOX;
 
@@ -28,7 +28,7 @@ static SETTINGS createSettings()
 	settings.numThreads = 8;
 
 	settings.totalSPP = 100;
-	settings.maxBounces = 4;
+	settings.maxBounces = 5;
 
 	return settings;
 }
@@ -60,9 +60,7 @@ public:
 	void reset()
 	{
 		renderStartTime = totalTime; // reset render start time
-		if (completed)
-		{
-			std::cout << "\n\n\n\n\n";
+		if (completed) {
 			completed = false;	// reset completed flag
 		}
 	}
@@ -83,7 +81,7 @@ public:
 		{
 			completed = true;
 			renderTime = totalTime - renderStartTime;
-			std::cout << "\nRender completed in " << std::roundf(renderTime) << " seconds.\n";
+			std::cout << "Render completed in " << std::roundf(renderTime) << " seconds.\n";
 		}
 	}
 
@@ -103,7 +101,6 @@ public:
 	}
 };
 
-
 /// <summary>
 /// Saves the current render from the given renderer to a PNG file in the 'Renders' directory.
 /// </summary>
@@ -119,46 +116,6 @@ static void saveRender(Renderer& rt, const std::string& filename)
 	rt.savePNG(filepath);
 }
 
-static std::string parseArgs(int argc, char* argv[], SETTINGS& settings)
-{
-	// argumnt contains the scene name and settings
-	// example: "scenes/cornell-box" -spp 100 -bounces 5 -threads 4 -denoise 1 -saveRenders 1 -numThreads 8 -filter 0 -toneMap 3 -drawMode 2 -algorithm 0
-	// create settings and return scene path if valid else return null
-
-	if (argc < 2)
-	{
-		std::cout << "Usage: RayTracer <scene_path> [options]\n";
-		return "";
-	}
-
-	std::string scenePath = argv[1];
-	std::unordered_map<std::string, std::string> argsMap;
-	for (int i = 2; i < argc; i += 2)
-	{
-		if (i + 1 < argc)
-			argsMap[argv[i]] = argv[i + 1];
-		else
-			argsMap[argv[i]] = "";
-	}
-
-	// Parse settings from argsMap
-	if (argsMap.find("-spp") != argsMap.end())
-		settings.totalSPP = max(10, min(100000, std::stoi(argsMap["-spp"])));
-	if (argsMap.find("-bounces") != argsMap.end())
-		settings.maxBounces = max(2, min(100, std::stoi(argsMap["-bounces"])));
-	if (argsMap.find("-threads") != argsMap.end())
-		settings.numThreads = max(1, min(64, std::stoi(argsMap["-threads"])));
-	if (argsMap.find("-denoise") != argsMap.end())
-		settings.denoise = std::stoi(argsMap["-denoise"]) != 0;
-	if (argsMap.find("-saveRenders") != argsMap.end())
-		settings.saveRenders = std::stoi(argsMap["-saveRenders"]) != 0;
-	if (argsMap.find("-filter") != argsMap.end())
-		settings.filter = static_cast<IMAGE_FILTER>(max(0, min(3, std::stoi(argsMap["-filter"]))));
-	if (argsMap.find("-toneMap") != argsMap.end())
-		settings.toneMap = static_cast<TONEMAP>(max(0, min(4, std::stoi(argsMap["-toneMap"]))));
-
-	return scenePath;
-}
 
 /// <summary>
 /// Entry point for the ray-tracing application. Initializes the scene, window, renderer, and main loop for user interaction and rendering.
@@ -172,17 +129,13 @@ int main(int argc, char* argv[])
 	tui::hideCursor();
 
 	SETTINGS settings = createSettings();
-	SceneManager sceneManager;
-
+	std::string scenePath = ArgsParser::parse(argc, argv, settings);
 	std::cout << settings;
 
-	if (argc < 2)
-		sceneManager.load(SCENES::VEACH_BIDIR, "scenes");
-	else
-	{
-		std::string scenePath = parseArgs(argc, argv, settings);
-		sceneManager.load(scenePath);
-	}
+	// Load scene
+	SceneManager sceneManager;
+	if (scenePath.empty()) sceneManager.load(SCENES::CORNELL_BOX, "scenes");
+	else sceneManager.load(scenePath);
 
 	// Create canvas
 	GamesEngineeringBase::Window canvas;
@@ -190,7 +143,7 @@ int main(int argc, char* argv[])
 	canvas.create(screenSize.x, screenSize.y, "Ray-Tracer", 1.0f);
 
 	// Create ray tracer
-	Renderer rt(sceneManager.curScene, &canvas, createSettings());
+	Renderer rt(sceneManager.curScene, &canvas, settings);
 
 	// Create timer
 	GamesEngineeringBase::Timer timer;
@@ -265,5 +218,6 @@ int main(int argc, char* argv[])
 	}
 
 	tui::showCursor();
+	tui::clear();
 	return 0;
 }
